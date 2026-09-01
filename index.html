@@ -6,8 +6,8 @@
     <title>학생 생활지도 관리 시스템</title>
     
     <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
+    <script async defer src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
+    <script async defer src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
     <style>
         * {
             margin: 0;
@@ -134,16 +134,16 @@
 
         .reason-btn {
             border: 3px solid transparent !important;
-            padding: 8px 14px !important;
+            padding: 8px 12px !important;
             transition: all 0.2s !important;
             font-weight: 600;
+            font-size: 13px !important;
         }
 
         .reason-btn.selected {
             border: 3px solid currentColor !important;
             box-shadow: 0 0 0 3px rgba(0,0,0,0.1), inset 0 0 8px currentColor !important;
             font-weight: 900 !important;
-            transform: scale(1.08) !important;
             filter: brightness(0.85);
         }
 
@@ -227,7 +227,25 @@
         }
 
         .modal.active { display: flex; }
-        .modal-content { background: white; border-radius: 8px; padding: 24px; max-width: 500px; width: 90%; }
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal button {
+            padding: 12px 16px !important;
+            font-size: 14px !important;
+            cursor: pointer !important;
+        }
+
+        .modal .button-group {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 12px !important;
+        }
 
         @media (max-width: 768px) {
             .container { grid-template-columns: 1fr; }
@@ -242,10 +260,35 @@
                 box-shadow: 2px 0 8px rgba(0,0,0,0.1);
             }
             .sidebar.active { left: 0; }
-            .main { padding: 16px; }
-            .form-row { grid-template-columns: 1fr; }
-            .stat-card { width: 100%; margin-right: 0; }
-            h1 { font-size: 22px; }
+            .main { padding: 12px; }
+            .card { padding: 12px; margin-bottom: 12px; }
+            h1 { font-size: 20px; margin-bottom: 12px; }
+            h2 { font-size: 16px; margin-bottom: 12px; }
+            h3 { font-size: 14px; }
+            h4 { font-size: 13px; }
+            p { font-size: 12px; }
+            
+            .form-row { grid-template-columns: 1fr; gap: 6px; }
+            .form-group { margin-bottom: 8px; }
+            .form-group label { font-size: 11px; margin-bottom: 3px; }
+            input, select, textarea { padding: 8px; font-size: 13px; }
+            button { padding: 8px 12px; font-size: 13px; }
+            
+            .button-group { gap: 6px; }
+            .reason-btn { padding: 6px 10px !important; font-size: 12px !important; }
+            
+            .stat-card { width: 100%; margin-right: 0; padding: 12px; }
+            .stat-label { font-size: 11px; }
+            .stat-value { font-size: 24px; }
+            
+            .student-item { padding: 10px; margin-bottom: 6px; }
+            .student-item h4 { margin-bottom: 2px; }
+            .student-item p { margin: 0; }
+            
+            .btn-small { padding: 5px 10px; font-size: 11px; }
+            
+            .header-date { padding: 6px 12px; font-size: 12px; }
+            .class-card { padding: 12px; font-size: 14px; margin-bottom: 8px; }
         }
     </style>
 </head>
@@ -376,7 +419,7 @@
                             <button class="reason-btn" onclick="setMorningReason('화장')" id="mbtn-화장" style="background: #f3e5f5; color: #6a1b9a;">화장</button>
                             <button class="reason-btn" onclick="setMorningReason('기타')" id="mbtn-기타" style="background: #e0f2f1; color: #00695c;">기타</button>
                         </div>
-                        <input type="text" id="morningReasonOther" placeholder="기타 사유 입력" onchange="morningInputs[0].reason = this.value">
+                        <input type="text" id="morningReasonOther" placeholder="기타 사유 입력">
                     </div>
                     <button onclick="saveMorningCheck()" style="width: 100%;">💾 저장</button>
                 </div>
@@ -394,13 +437,18 @@
             <h3>저장 확인</h3>
             <p id="confirmMessage"></p>
             <div class="button-group">
-                <button class="secondary" onclick="closeConfirmModal()">취소</button>
-                <button onclick="confirmSave()">저장</button>
+                <button class="secondary" onclick="closeConfirmModal(); return false;">취소</button>
+                <button onclick="confirmSave(); return false;">저장</button>
             </div>
         </div>
     </div>
 
     <script>
+        let db, records = {}, morningCheck = [], workTasks = [], cleanTasks = [];
+        let selectedReason = '', selectedMorningReason = '';
+        let isLoading = true;
+
+        // Firebase 설정
         const firebaseConfig = {
             apiKey: "AIzaSyDekIKrzT2lM-QE_6EwOd-_9SSeRWkAJxE",
             authDomain: "yugagate-62119.firebaseapp.com",
@@ -411,18 +459,45 @@
             databaseURL: "https://yugagate-62119-default-rtdb.asia-southeast1.firebasedatabase.app"
         };
 
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+        // Firebase 초기화 (로드 완료 후)
+        window.addEventListener('load', () => {
+            if (typeof firebase !== 'undefined') {
+                console.log('✅ Firebase SDK 로드됨');
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.database();
+                console.log('✅ Firebase 초기화 완료');
+                
+                // Firebase 데이터 로드
+                db.ref().once('value', snap => {
+                    const data = snap.val();
+                    if (data) {
+                        records = data.records || {};
+                        morningCheck = data.morningCheck || [];
+                        workTasks = data.workTasks || [];
+                        cleanTasks = data.cleanTasks || [];
+                    }
+                    setupFirebaseListeners();
+                }).catch((error) => {
+                    console.error('❌ Firebase 데이터 로드 오류:', error);
+                    isLoading = false; 
+                    render();
+                });
+            } else {
+                console.error('❌ Firebase SDK를 찾을 수 없습니다');
+            }
+        });
 
-        let records = {}, morningCheck = [], workTasks = [], cleanTasks = [];
-        let selectedMorningReason = '';
+        // 페이지 로드 완료 후 초기화
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('✅ DOM 로드 완료');
+            updateAllDates();
+        });
         
         function setMorningReason(reason) {
             selectedMorningReason = reason;
             document.querySelectorAll('#morning .reason-btn').forEach(b => b.classList.remove('selected'));
             document.getElementById('mbtn-' + reason).classList.add('selected');
         }
-        let morningInputs = [{ date: getTodayDate(), grade: '', class: '', name: '', reason: '' }];
 
         function getTodayDate() {
             return new Date().toISOString().split('T')[0];
@@ -483,23 +558,20 @@
             isLoading = false;
             render();
         }
-
-        db.ref().once('value', snap => {
-            const data = snap.val();
-            if (data) {
-                records = data.records || {};
-                morningCheck = data.morningCheck || [];
-                workTasks = data.workTasks || [];
-                cleanTasks = data.cleanTasks || [];
-            }
-            setupFirebaseListeners();
-        }).catch(() => { isLoading = false; render(); });
-
         function save() {
-            db.ref('records').set(records);
-            db.ref('morningCheck').set(morningCheck);
-            db.ref('workTasks').set(workTasks);
-            db.ref('cleanTasks').set(cleanTasks);
+            if (!db) {
+                console.error('❌ Firebase가 아직 준비되지 않았습니다');
+                return;
+            }
+            try {
+                db.ref('records').set(records);
+                db.ref('morningCheck').set(morningCheck);
+                db.ref('workTasks').set(workTasks);
+                db.ref('cleanTasks').set(cleanTasks);
+                console.log('✅ Firebase 저장 성공');
+            } catch (error) {
+                console.error('❌ Firebase 저장 오류:', error);
+            }
         }
 
         function setReason(reason) {
@@ -568,39 +640,62 @@
         }
 
         function confirmSave() {
+            console.log('=== confirmSave 시작 ===');
+            console.log('pendingSaveType:', pendingSaveType);
+            
             const g = document.getElementById('inputGrade').value;
             const c = document.getElementById('inputClass').value;
             const n = document.getElementById('inputName').value;
             const r = selectedReason === '기타' ? document.getElementById('inputReasonOther').value : selectedReason;
             const t = getTodayDate();
 
-            // 검증
+            console.log('입력값:', {학년: g, 반: c, 이름: n, 사유: r});
+
             if (!g || !c || !n || !r) {
                 alert('모든 항목을 입력해주세요!');
-                return;
+                console.log('❌ 검증 실패');
+                return false;
             }
 
-            if (pendingSaveType === 'record') {
-                if (!records[t]) records[t] = [];
-                records[t].push({ grade: parseInt(g), class: parseInt(c), name: n, reason: r, id: Date.now() + Math.random() });
-            } else if (pendingSaveType === 'work') {
-                workTasks.push({ id: Date.now() + Math.random(), studentName: n, grade: parseInt(g), class: parseInt(c), date: t, status: '작성중' });
-            } else if (pendingSaveType === 'clean') {
-                cleanTasks.push({ id: Date.now() + Math.random(), studentName: n, grade: parseInt(g), class: parseInt(c), date: t, status: '작성중' });
-            }
+            try {
+                if (pendingSaveType === 'record') {
+                    if (!records[t]) records[t] = [];
+                    records[t].push({ grade: parseInt(g), class: parseInt(c), name: n, reason: r, id: Date.now() + Math.random() });
+                    console.log('✅ 누적저장 완료');
+                } else if (pendingSaveType === 'work') {
+                    const newTask = { id: Date.now() + Math.random(), studentName: n, grade: parseInt(g), class: parseInt(c), date: t, status: '작성중' };
+                    workTasks.push(newTask);
+                    console.log('✅ 빡지 추가 완료:', newTask);
+                } else if (pendingSaveType === 'clean') {
+                    const newTask = { id: Date.now() + Math.random(), studentName: n, grade: parseInt(g), class: parseInt(c), date: t, status: '작성중' };
+                    cleanTasks.push(newTask);
+                    console.log('✅ 청소 추가 완료:', newTask);
+                }
 
-            save();
-            closeConfirmModal();
-            document.getElementById('inputGrade').value = '';
-            document.getElementById('inputClass').value = '';
-            document.getElementById('inputClass').innerHTML = '<option value="">선택</option>';
-            document.getElementById('inputName').value = '';
-            document.getElementById('inputReasonOther').value = '';
-            document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('selected'));
-            selectedReason = '';
-            updatePreview();
-            alert('저장되었습니다!');
-            render();
+                console.log('Firebase 저장 시도...');
+                save();
+                console.log('✅ Firebase 저장 완료');
+                
+                closeConfirmModal();
+                document.getElementById('inputGrade').value = '';
+                document.getElementById('inputClass').value = '';
+                document.getElementById('inputClass').innerHTML = '<option value="">선택</option>';
+                document.getElementById('inputName').value = '';
+                document.getElementById('inputReasonOther').value = '';
+                document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('selected'));
+                selectedReason = '';
+                pendingSaveType = null;
+                
+                updatePreview();
+                console.log('=== confirmSave 완료 ===');
+                alert('저장되었습니다!');
+                render();
+                return false;
+            } catch (error) {
+                console.error('❌ 오류 발생:', error);
+                alert('저장 중 오류 발생: ' + error.message);
+                return false;
+            }
         }
 
         function switchPage(name) {
@@ -764,6 +859,13 @@
         function renderMorning() {
             updateAllDates();
             selectedMorningReason = '';
+            
+            // 입력 폼 초기화
+            document.getElementById('morningDate_input').value = getTodayDate();
+            document.getElementById('morningGrade').value = '';
+            document.getElementById('morningClass').innerHTML = '<option value="">선택</option>';
+            document.getElementById('morningName').value = '';
+            document.getElementById('morningReasonOther').value = '';
             document.querySelectorAll('#morning .reason-btn').forEach(b => b.classList.remove('selected'));
             
             const t = getTodayDate();
