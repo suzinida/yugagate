@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>학생 생활지도 관리 시스템</title>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
     <style>
         * {
             margin: 0;
@@ -502,15 +506,31 @@
     </div>
 
     <script>
-        let records = JSON.parse(localStorage.getItem('records') || '{}');
-        let morningCheck = JSON.parse(localStorage.getItem('morningCheck') || '[]');
-        let workTasks = JSON.parse(localStorage.getItem('workTasks') || '[]');
-        let cleanTasks = JSON.parse(localStorage.getItem('cleanTasks') || '[]');
+        // Firebase 초기화
+        const firebaseConfig = {
+            apiKey: "AIzaSyDekIKrzT2lM-QE_6EwOd-_9SSeRWkAJxE",
+            authDomain: "yugagate-62119.firebaseapp.com",
+            projectId: "yugagate-62119",
+            storageBucket: "yugagate-62119.firebasestorage.app",
+            messagingSenderId: "491917125896",
+            appId: "1:491917125896:web:5b057fed15fcc4660264bd",
+            databaseURL: "https://yugagate-62119-default-rtdb.asia-southeast1.firebasedatabase.app"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // 데이터 변수 (메모리에서 관리)
+        let records = {};
+        let morningCheck = [];
+        let workTasks = [];
+        let cleanTasks = [];
         let inputs = [{ grade: '', class: '', name: '', reason: '' }];
         let morningInputs = [{ date: getTodayDate(), grade: '', class: '', name: '', reason: '' }];
         let selectedDetail = null;
         let previewData = null;
         let pendingSaveType = null;
+        let isLoading = true;
 
         function getTodayDate() {
             const d = new Date();
@@ -534,18 +554,18 @@
         }
 
         function save() {
-            localStorage.setItem('records', JSON.stringify(records));
-            localStorage.setItem('morningCheck', JSON.stringify(morningCheck));
-            localStorage.setItem('workTasks', JSON.stringify(workTasks));
-            localStorage.setItem('cleanTasks', JSON.stringify(cleanTasks));
+            db.ref('records').set(records);
+            db.ref('morningCheck').set(morningCheck);
+            db.ref('workTasks').set(workTasks);
+            db.ref('cleanTasks').set(cleanTasks);
         }
 
         function clearAllData() {
             if (confirm('정말로 모든 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다!')) {
-                localStorage.removeItem('records');
-                localStorage.removeItem('morningCheck');
-                localStorage.removeItem('workTasks');
-                localStorage.removeItem('cleanTasks');
+                db.ref('records').remove();
+                db.ref('morningCheck').remove();
+                db.ref('workTasks').remove();
+                db.ref('cleanTasks').remove();
                 
                 records = {};
                 morningCheck = [];
@@ -555,7 +575,7 @@
                 morningInputs = [{ date: getTodayDate(), grade: '', class: '', name: '', reason: '' }];
                 
                 alert('모든 데이터가 삭제되었습니다!');
-                location.reload();
+                render();
             }
         }
 
@@ -707,6 +727,54 @@
                 render();
             }
         }
+
+        // Firebase에서 데이터 로드 및 실시간 동기화
+        function setupFirebaseListeners() {
+            db.ref('records').on('value', (snapshot) => {
+                records = snapshot.val() || {};
+                if (!isLoading) render();
+            });
+
+            db.ref('morningCheck').on('value', (snapshot) => {
+                morningCheck = snapshot.val() || [];
+                if (!isLoading && document.getElementById('morning')?.classList.contains('active')) renderMorning();
+            });
+
+            db.ref('workTasks').on('value', (snapshot) => {
+                workTasks = snapshot.val() || [];
+                if (!isLoading) {
+                    if (document.getElementById('work')?.classList.contains('active')) renderWork();
+                    render();
+                }
+            });
+
+            db.ref('cleanTasks').on('value', (snapshot) => {
+                cleanTasks = snapshot.val() || [];
+                if (!isLoading) {
+                    if (document.getElementById('clean')?.classList.contains('active')) renderClean();
+                    render();
+                }
+            });
+
+            isLoading = false;
+            render();
+        }
+
+        // 초기 데이터 로드
+        db.ref().once('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                records = data.records || {};
+                morningCheck = data.morningCheck || [];
+                workTasks = data.workTasks || [];
+                cleanTasks = data.cleanTasks || [];
+            }
+            setupFirebaseListeners();
+        }).catch((error) => {
+            console.error('Firebase 로드 오류:', error);
+            isLoading = false;
+            render();
+        });
 
         function render() {
             updateAllDates();
@@ -1110,8 +1178,6 @@
             `).join('');
             document.getElementById('morningListContainer').innerHTML = html;
         }
-
-        render();
     </script>
 </body>
 </html>
