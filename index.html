@@ -8,6 +8,9 @@
     <!-- Firebase SDK (Compat 버전) -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <!-- XLSX 라이브러리 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -327,14 +330,15 @@
                         </div>
                         <div class="form-group">
                             <label>반</label>
-                            <select id="inputClass">
+                            <select id="inputClass" onchange="updateStudentNameList()">
                                 <option value="">선택</option>
                             </select>
                         </div>
                     </div>
                     <div class="form-group">
                         <label>이름</label>
-                        <input type="text" id="inputName" placeholder="학생 이름 입력">
+                        <input type="text" id="inputName" placeholder="학생 이름 입력" list="studentNameList">
+                        <datalist id="studentNameList"></datalist>
                     </div>
                     <button onclick="queryRecords()" style="width: 100%; background: #3b82f6; color: white; padding: 12px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer;">🔍 조회</button>
                 </div>
@@ -390,14 +394,15 @@
                         </div>
                         <div class="form-group">
                             <label>반</label>
-                            <select id="morningClass" onchange="morningInputs[0].class = parseInt(this.value) || ''">
+                            <select id="morningClass" onchange="morningInputs[0].class = parseInt(this.value) || ''; updateMorningStudentNameList();">
                                 <option value="">선택</option>
                             </select>
                         </div>
                     </div>
                     <div class="form-group">
                         <label>이름</label>
-                        <input type="text" id="morningName" placeholder="이름" onchange="morningInputs[0].name = this.value">
+                        <input type="text" id="morningName" placeholder="이름" list="morningStudentNameList" onchange="morningInputs[0].name = this.value">
+                        <datalist id="morningStudentNameList"></datalist>
                     </div>
                     <div class="form-group">
                         <label>사유</label>
@@ -421,6 +426,20 @@
             <div id="settings" class="page">
                 <div class="header-date"></div>
                 <h1>🔧 설정</h1>
+                
+                <div class="card">
+                    <h2 style="color: #3b82f6;">📋 학생 명단 업로드</h2>
+                    <p style="color: #666; margin-bottom: 16px; font-size: 13px;">엑셀 파일을 업로드하면 이름 입력 시 자동완성이 됩니다.<br>기존 데이터는 영향받지 않습니다.</p>
+                    <input type="file" id="studentListFile" accept=".xlsx,.xls,.csv" style="margin-bottom: 12px;">
+                    <button type="button" onclick="uploadStudentList()" style="width: 100%; background: #3b82f6; color: white; padding: 10px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 14px;">📤 명단 업로드</button>
+                    <div id="uploadStatus" style="margin-top: 12px; font-size: 12px; color: #666;"></div>
+                </div>
+
+                <div class="card">
+                    <h2 style="color: #10b981;">✅ 업로드된 명단</h2>
+                    <div id="studentListPreview" style="max-height: 200px; overflow-y: auto; font-size: 12px;"></div>
+                </div>
+                
                 <div class="card">
                     <h2 style="color: #dc2626;">⚠️ 위험한 작업</h2>
                     <p style="color: #666; margin-bottom: 16px; font-size: 14px;">학기가 종료되면 모든 기록을 삭제하고 새로 시작할 수 있습니다.</p>
@@ -454,7 +473,7 @@
     </div>
 
     <script>
-        let db, records = {}, morningCheck = [], workTasks = [], cleanTasks = [];
+        let db, records = {}, morningCheck = [], workTasks = [], cleanTasks = [], studentList = [];
         let selectedReason = '', selectedMorningReason = '';
         let isLoading = true;
 
@@ -546,6 +565,43 @@
                 opt.textContent = i + '반';
                 classSelect.appendChild(opt);
             }
+            
+            // 반 변경 시 이름 드롭다운도 업데이트
+            updateStudentNameList();
+        }
+        
+        function updateStudentNameList() {
+            const grade = document.getElementById('inputGrade').value;
+            const cls = document.getElementById('inputClass').value;
+            const datalist = document.getElementById('studentNameList');
+            
+            datalist.innerHTML = '';
+            
+            if (grade && cls) {
+                const names = getStudentNamesByClass(grade, cls);
+                names.forEach(name => {
+                    const option = document.createElement('option');
+                    option.value = name;
+                    datalist.appendChild(option);
+                });
+            }
+        }
+        
+        function updateMorningStudentNameList() {
+            const grade = document.getElementById('morningGrade').value;
+            const cls = document.getElementById('morningClass').value;
+            const datalist = document.getElementById('morningStudentNameList');
+            
+            datalist.innerHTML = '';
+            
+            if (grade && cls) {
+                const names = getStudentNamesByClass(grade, cls);
+                names.forEach(name => {
+                    const option = document.createElement('option');
+                    option.value = name;
+                    datalist.appendChild(option);
+                });
+            }
         }
 
         function updateMorningClassDropdown() {
@@ -564,6 +620,9 @@
                 opt.textContent = i + '반';
                 classSelect.appendChild(opt);
             }
+            
+            // 학년 변경 시 이름 드롭다운도 업데이트
+            updateMorningStudentNameList();
         }
 
         function updateAllDates() {
@@ -603,6 +662,10 @@
                     if (document.getElementById('byclass')?.classList.contains('active')) renderByClass();
                     render();
                 }
+            });
+            db.ref('studentList').on('value', snap => {
+                studentList = snap.val() || [];
+                showStudentListPreview();
             });
             isLoading = false;
             render();
@@ -973,6 +1036,9 @@
         }
 
         function renderByClass() {
+            // 사이드바 다시 보이기
+            document.getElementById('sidebar').style.display = '';
+            
             updateAllDates();
             const st = {}, sr = {};
             Object.keys(records).forEach(d => records[d].forEach(r => {
@@ -1000,6 +1066,9 @@
         }
 
         function showClassDetail(grade, cls) {
+            // 사이드바 숨기기
+            document.getElementById('sidebar').style.display = 'none';
+            
             const studentData = {}; // {name: {지각: count, 복장: count, 화장: count, 기타: [...], 빡지미: count, 청소미: count}}
             
             // 지도 기록 수집 (사유별)
@@ -1043,7 +1112,7 @@
 
             // 학생 이름 가나다 순 정렬
             const students = Object.keys(studentData).sort();
-            let h = `<div class="card" style="margin-top: 20px;"><button class="secondary" onclick="renderByClass()" style="margin-bottom: 12px;">← 뒤로가기</button><h3>${grade}학년 ${cls}반 (지도내용)</h3>`;
+            let h = `<div class="card" style="margin-top: 20px;"><button class="secondary" onclick="renderByClass(); document.getElementById('sidebar').style.display = ''; " style="margin-bottom: 12px;">← 뒤로가기</button><h3>${grade}학년 ${cls}반 (지도내용)</h3>`;
             
             students.forEach(name => {
                 const data = studentData[name];
@@ -1078,6 +1147,7 @@
                     <div style="background: #eff6ff; padding: 10px; border-radius: 4px; width: 100%; font-size: 13px; line-height: 1.6; margin-bottom: 8px;">
                         <strong>📋 지도내용:</strong> ${reasonList.length > 0 ? reasonList.join(' | ') : '(기록 없음)'}
                     </div>
+                    <button type="button" onclick="showStudentRecordDetails('${grade}', '${cls}', '${name}')" style="background: #3b82f6; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600; margin-bottom: 8px;">📝 기록 수정</button>
                     ${pendingInfo}
                 </div>`;
             });
@@ -1326,12 +1396,169 @@
             alert('저장되었습니다!');
         }
 
-        function confirmMorningCheck(id) {
-            const m = morningCheck.find(x => x.id == id);
-            if (m) { m.confirmed = true; save(); renderMorning(); }
+        function showStudentRecordDetails(grade, cls, name) {
+            // 해당 학생의 모든 기록 조회
+            const studentRecords = [];
+            Object.keys(records).forEach(date => {
+                records[date].forEach(r => {
+                    if (r.grade == grade && r.class == cls && r.name == name) {
+                        studentRecords.push({date, reason: r.reason, id: r.id});
+                    }
+                });
+            });
+            
+            // 날짜 역순 정렬 (최신 먼저)
+            studentRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            let h = `
+                <div class="card" style="margin-top: 20px;">
+                    <button class="secondary" onclick="showClassDetail('${grade}', '${cls}')" style="margin-bottom: 12px;">← 뒤로가기</button>
+                    <h3>${grade}학년 ${cls}반 ${name} - 기록 수정</h3>
+                    <p style="color: #666; font-size: 13px; margin-bottom: 12px;">각 기록 옆의 [삭제] 버튼으로 잘못된 기록을 삭제할 수 있습니다.</p>
+                    ${studentRecords.length > 0 ? `
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+                            ${studentRecords.map((rec, idx) => `
+                                <div style="background: #f9f9f9; padding: 10px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #3b82f6;">
+                                    <div>
+                                        <strong style="font-size: 14px;">${rec.date}</strong>
+                                        <span style="margin-left: 12px; background: #eff6ff; padding: 2px 6px; border-radius: 3px; font-size: 12px; color: #3b82f6;">${rec.reason}</span>
+                                    </div>
+                                    <button type="button" onclick="deleteStudentRecord('${rec.date}', '${rec.id}', '${grade}', '${cls}', '${name}')" style="background: #ef4444; color: white; border: none; padding: 3px 5px; border-radius: 3px; font-size: 10px; cursor: pointer; font-weight: 600;">🗑️ 삭제</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : `<p style="color: #999; text-align: center; padding: 20px;">기록이 없습니다</p>`}
+                </div>
+            `;
+            
+            document.getElementById('studentDetailContainer').innerHTML = h;
+        }
+        
+        function deleteStudentRecord(date, recordId, grade, cls, name) {
+            if (!confirm('이 기록을 삭제하시겠습니까?')) {
+                return;
+            }
+            
+            // 해당 날짜의 기록 배열에서 ID로 삭제
+            if (records[date]) {
+                records[date] = records[date].filter(r => r.id != recordId);
+                
+                // 빈 배열이면 날짜 항목 삭제
+                if (records[date].length === 0) {
+                    delete records[date];
+                }
+            }
+            
+            // Firebase에 저장
+            save();
+            
+            // 화면 새로고침
+            showStudentRecordDetails(grade, cls, name);
         }
 
-        // ============ 학기 종료 함수 ============
+        // ============ 학생 명단 업로드 함수 ============
+        function uploadStudentList() {
+            const fileInput = document.getElementById('studentListFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('파일을 선택해주세요!');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                    
+                    // 데이터 파싱
+                    const newStudentList = [];
+                    for (let i = 1; i < json.length; i++) {  // 헤더 스킵
+                        const row = json[i];
+                        if (row && row.length >= 3) {
+                            const grade = row[0];
+                            const cls = row[1];
+                            const name = row[2];
+                            
+                            // 빈 셀 제외
+                            if (grade && cls && name) {
+                                newStudentList.push({
+                                    grade: parseInt(grade),
+                                    class: parseInt(cls),
+                                    name: String(name).trim()
+                                });
+                            }
+                        }
+                    }
+                    
+                    if (newStudentList.length === 0) {
+                        alert('유효한 학생 데이터가 없습니다!');
+                        return;
+                    }
+                    
+                    // 기존 데이터는 절대 건드리지 않음!
+                    // studentList만 업데이트
+                    studentList = newStudentList;
+                    
+                    // Firebase에 저장
+                    if (db) {
+                        db.ref('studentList').set(studentList, (error) => {
+                            if (error) {
+                                console.error('저장 실패:', error);
+                                alert('저장 실패: ' + error.message);
+                            } else {
+                                document.getElementById('uploadStatus').innerHTML = `✅ ${newStudentList.length}명의 학생 명단이 저장되었습니다!`;
+                                document.getElementById('studentListFile').value = '';
+                                showStudentListPreview();
+                            }
+                        });
+                    } else {
+                        alert('Firebase 연결 오류');
+                    }
+                } catch (error) {
+                    console.error('파일 파싱 오류:', error);
+                    alert('파일 형식이 올바르지 않습니다. CSV 또는 XLSX 형식을 사용해주세요.');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function showStudentListPreview() {
+            const preview = document.getElementById('studentListPreview');
+            
+            if (studentList.length === 0) {
+                preview.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">아직 명단이 없습니다</p>';
+                return;
+            }
+            
+            let html = `<table style="width: 100%; border-collapse: collapse;">
+                <tr style="background: #f0f0f0; font-weight: 600;">
+                    <td style="padding: 6px; border: 1px solid #ddd;">학년</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">반</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">이름</td>
+                </tr>`;
+            
+            studentList.forEach(student => {
+                html += `<tr>
+                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${student.grade}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${student.class}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">${student.name}</td>
+                </tr>`;
+            });
+            
+            html += '</table>';
+            preview.innerHTML = html;
+        }
+
+        function getStudentNamesByClass(grade, cls) {
+            return studentList
+                .filter(s => s.grade == grade && s.class == cls)
+                .map(s => s.name)
+                .sort();
+        }
         function showSemesterEndPassword() {
             document.getElementById('passwordModal').classList.add('active');
             document.getElementById('semesterEndPassword').value = '';
