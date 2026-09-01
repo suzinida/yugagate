@@ -337,8 +337,8 @@
                     </div>
                     <div class="form-group">
                         <label>이름</label>
-                        <input type="text" id="inputName" placeholder="학생 이름 입력" list="studentNameList">
-                        <datalist id="studentNameList"></datalist>
+                        <input type="text" id="inputName" placeholder="학생 이름 입력" oninput="filterStudentNames()">
+                        <div id="studentNameSuggestions" style="margin-top: 8px;"></div>
                     </div>
                     <button onclick="queryRecords()" style="width: 100%; background: #3b82f6; color: white; padding: 12px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer;">🔍 조회</button>
                 </div>
@@ -401,8 +401,8 @@
                     </div>
                     <div class="form-group">
                         <label>이름</label>
-                        <input type="text" id="morningName" placeholder="이름" list="morningStudentNameList" onchange="morningInputs[0].name = this.value">
-                        <datalist id="morningStudentNameList"></datalist>
+                        <input type="text" id="morningName" placeholder="이름" oninput="filterMorningStudentNames(); morningInputs[0].name = this.value">
+                        <div id="morningNameSuggestions" style="margin-top: 8px;"></div>
                     </div>
                     <div class="form-group">
                         <label>사유</label>
@@ -570,38 +570,120 @@
             updateStudentNameList();
         }
         
+        function filterStudentNames() {
+            const grade = document.getElementById('inputGrade').value;
+            const cls = document.getElementById('inputClass').value;
+            const inputName = document.getElementById('inputName').value.trim();
+            const container = document.getElementById('studentNameSuggestions');
+
+            if (!grade || !cls) {
+                container.innerHTML = '';
+                return;
+            }
+
+            if (!inputName) {
+                container.innerHTML = '';
+                return;
+            }
+
+            // 현재 반의 모든 학생명 가져오기 (기록된 학생들)
+            const studentsInClass = new Set();
+            Object.keys(records).forEach(d => records[d].forEach(r => {
+                if (r.grade == grade && r.class == cls) {
+                    studentsInClass.add(r.name);
+                }
+            }));
+
+            // 입력한 글자로 필터링
+            const filtered = Array.from(studentsInClass)
+                .filter(name => name.includes(inputName))
+                .sort();
+
+            if (filtered.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '<div style="background: #f0f7ff; border: 1px solid #378ADD; border-radius: 4px; padding: 8px; max-height: 150px; overflow-y: auto;">';
+            filtered.forEach(name => {
+                html += `<div style="padding: 6px 8px; cursor: pointer; border-radius: 3px; margin-bottom: 2px; background: white; transition: all 0.2s; border-left: 3px solid transparent;" 
+                        onclick="document.getElementById('inputName').value='${name}'; filterStudentNames();"
+                        onmouseover="this.style.background='#eff6ff'; this.style.borderLeftColor='#378ADD';"
+                        onmouseout="this.style.background='white'; this.style.borderLeftColor='transparent';">
+                    ${name}
+                </div>`;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
         function updateStudentNameList() {
             const grade = document.getElementById('inputGrade').value;
             const cls = document.getElementById('inputClass').value;
-            const datalist = document.getElementById('studentNameList');
             
-            datalist.innerHTML = '';
-            
+            // 클래스 변경 시 이름 입력 필드 초기화
             if (grade && cls) {
-                const names = getStudentNamesByClass(grade, cls);
-                names.forEach(name => {
-                    const option = document.createElement('option');
-                    option.value = name;
-                    datalist.appendChild(option);
-                });
+                document.getElementById('inputName').value = '';
+                filterStudentNames();
             }
         }
         
         function updateMorningStudentNameList() {
             const grade = document.getElementById('morningGrade').value;
             const cls = document.getElementById('morningClass').value;
-            const datalist = document.getElementById('morningStudentNameList');
             
-            datalist.innerHTML = '';
-            
+            // 반 변경 시 이름 입력 필드 초기화
             if (grade && cls) {
-                const names = getStudentNamesByClass(grade, cls);
-                names.forEach(name => {
-                    const option = document.createElement('option');
-                    option.value = name;
-                    datalist.appendChild(option);
-                });
+                document.getElementById('morningName').value = '';
+                filterMorningStudentNames();
             }
+        }
+
+        function filterMorningStudentNames() {
+            const grade = document.getElementById('morningGrade').value;
+            const cls = document.getElementById('morningClass').value;
+            const inputName = document.getElementById('morningName').value.trim();
+            const container = document.getElementById('morningNameSuggestions');
+
+            if (!grade || !cls) {
+                container.innerHTML = '';
+                return;
+            }
+
+            if (!inputName) {
+                container.innerHTML = '';
+                return;
+            }
+
+            // 현재 반의 모든 학생명 가져오기 (기록된 학생들)
+            const studentsInClass = new Set();
+            Object.keys(records).forEach(d => records[d].forEach(r => {
+                if (r.grade == grade && r.class == cls) {
+                    studentsInClass.add(r.name);
+                }
+            }));
+
+            // 입력한 글자로 필터링
+            const filtered = Array.from(studentsInClass)
+                .filter(name => name.includes(inputName))
+                .sort();
+
+            if (filtered.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '<div style="background: #f0f7ff; border: 1px solid #378ADD; border-radius: 4px; padding: 8px; max-height: 150px; overflow-y: auto;">';
+            filtered.forEach(name => {
+                html += `<div style="padding: 6px 8px; cursor: pointer; border-radius: 3px; margin-bottom: 2px; background: white; transition: all 0.2s; border-left: 3px solid transparent;" 
+                        onclick="document.getElementById('morningName').value='${name}'; filterMorningStudentNames();"
+                        onmouseover="this.style.background='#eff6ff'; this.style.borderLeftColor='#378ADD';"
+                        onmouseout="this.style.background='white'; this.style.borderLeftColor='transparent';">
+                    ${name}
+                </div>`;
+            });
+            html += '</div>';
+            container.innerHTML = html;
         }
 
         function updateMorningClassDropdown() {
@@ -1038,31 +1120,40 @@
         function renderByClass() {
             // 사이드바 다시 보이기
             document.getElementById('sidebar').style.display = '';
+            document.getElementById('studentDetailContainer').innerHTML = '';
             
             updateAllDates();
-            const st = {}, sr = {};
+            
+            // 기록된 반들 수집
+            const recordsByClass = {};
             Object.keys(records).forEach(d => records[d].forEach(r => {
-                const k = `${r.grade}-${r.class}`, sk = `${k}-${r.name}`;
-                if (!st[k]) st[k] = {}; if (!st[k][r.name]) st[k][r.name] = 0;
-                if (!sr[sk]) sr[sk] = {}; if (!sr[sk][r.reason]) sr[sk][r.reason] = 0;
-                st[k][r.name]++; sr[sk][r.reason]++;
+                const k = `${r.grade}-${r.class}`;
+                if (!recordsByClass[k]) recordsByClass[k] = new Set();
+                recordsByClass[k].add(r.name);
             }));
 
             let h = '';
             
-            // 학년별 정렬
+            // 학년별로 반 표시 (기록이 있는 반만)
             for (let g = 1; g <= 3; g++) {
                 let maxClass = g === 1 ? 11 : g === 2 ? 12 : 11;
                 for (let c = 1; c <= maxClass; c++) {
                     const k = `${g}-${c}`;
-                    if (st[k]) {
-                        h += `<div class="class-card" onclick="showClassDetail(${g}, ${c})">${g}학년 ${c}반</div>`;
+                    if (recordsByClass[k]) {
+                        const studentCount = recordsByClass[k].size;
+                        h += `<div class="class-card" onclick="showClassDetail(${g}, ${c})" style="position: relative;">
+                            ${g}학년 ${c}반
+                            <span style="position: absolute; top: 8px; right: 8px; background: #3b82f6; color: white; font-size: 11px; padding: 2px 6px; border-radius: 12px; font-weight: 600;">${studentCount}</span>
+                        </div>`;
                     }
                 }
             }
 
-            document.getElementById('byclassContainer').innerHTML = h || '<div class="empty">기록이 없습니다</div>';
-            document.getElementById('studentDetailContainer').innerHTML = '';
+            if (!h) {
+                h = '<div style="padding: 20px; text-align: center; color: #999; background: #f9f9f9; border-radius: 6px; margin: 16px 0;">아직 지도 기록이 없습니다</div>';
+            }
+
+            document.getElementById('byclassContainer').innerHTML = h;
         }
 
         function showClassDetail(grade, cls) {
@@ -1106,13 +1197,16 @@
             });
 
             if (Object.keys(studentData).length === 0) {
-                document.getElementById('studentDetailContainer').innerHTML = '<div class="empty">지도 기록이 없습니다</div>';
+                document.getElementById('studentDetailContainer').innerHTML = '<div class="card"><button class="secondary" onclick="renderByClass(); document.getElementById(\'sidebar\').style.display = \'\';" style="margin-bottom: 16px; width: 100%;">← 뒤로가기</button><p style="color: #999; text-align: center; padding: 20px;">지도 기록이 없습니다</p></div>';
                 return;
             }
 
             // 학생 이름 가나다 순 정렬
             const students = Object.keys(studentData).sort();
-            let h = `<div class="card" style="margin-top: 20px;"><button class="secondary" onclick="renderByClass(); document.getElementById('sidebar').style.display = ''; " style="margin-bottom: 12px;">← 뒤로가기</button><h3>${grade}학년 ${cls}반 (지도내용)</h3>`;
+            let h = `<div class="card">
+                <button class="secondary" onclick="renderByClass(); document.getElementById('sidebar').style.display = '';" style="margin-bottom: 16px; width: 100%;">← 뒤로가기</button>
+                <h2>${grade}학년 ${cls}반</h2>
+                <div style="border-top: 2px solid #ddd; padding-top: 16px; margin-top: 16px;">`;
             
             students.forEach(name => {
                 const data = studentData[name];
@@ -1152,7 +1246,7 @@
                 </div>`;
             });
 
-            h += '</div>';
+            h += '</div></div>';
             document.getElementById('studentDetailContainer').innerHTML = h;
         }
 
