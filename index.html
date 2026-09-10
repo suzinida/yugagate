@@ -500,16 +500,27 @@
             const g = document.getElementById('inputGrade').value;
             const c = document.getElementById('inputClass').value;
             const n = document.getElementById('inputName').value;
-            const num = document.getElementById('inputNumber').value;
+            let num = document.getElementById('inputNumber').value;
             
             if (!g || !c || !n) {
                 alert('학년, 반, 이름을 모두 입력해주세요!');
                 return;
             }
 
+            // 번호가 없으면 입력된 이름으로 자동 매칭
             if (!num) {
-                alert('이름 목록에서 정확히 선택해주세요!');
-                return;
+                const grade = parseInt(g);
+                const cls = parseInt(c);
+                const students = getStudentsByClass(grade, cls);
+                const selected = students.find(s => s.name === n);
+                
+                if (selected) {
+                    num = selected.number;
+                    document.getElementById('inputNumber').value = num;
+                } else {
+                    alert('입력하신 이름이 학생명단에 없습니다.\n이름을 다시 확인해주세요.');
+                    return;
+                }
             }
 
             // Google Sheets에서 해당 학생 찾기
