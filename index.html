@@ -1,953 +1,748 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>학생 생활지도 관리 시스템</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>학생 생활지도 관리</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif;
+        background: #f5f5f5;
+        color: #333;
+        line-height: 1.5;
+    }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
-            background: #f5f5f5;
-            color: #333;
-        }
+    .container { display: grid; grid-template-columns: 180px 1fr; min-height: 100vh; }
 
-        .container { display: grid; grid-template-columns: 180px 1fr; min-height: 100vh; }
+    .sidebar { background: #fff; border-right: 1px solid #ddd; padding: 20px 0; }
 
+    .nav-item {
+        padding: 12px 16px;
+        cursor: pointer;
+        color: #666;
+        border-left: 3px solid transparent;
+    }
+    .nav-item:hover { background: #f9f9f9; color: #333; }
+    .nav-item.active { background: #f0f7ff; border-left-color: #378ADD; color: #378ADD; font-weight: 600; }
+
+    .hamburger {
+        display: none;
+        position: fixed; top: 10px; left: 10px; z-index: 1000;
+        background: #fff; border: 1px solid #ddd; border-radius: 6px;
+        font-size: 20px; padding: 4px 10px; cursor: pointer; color: #333;
+    }
+
+    .main { padding: 32px; }
+
+    .header-date {
+        display: inline-block;
+        background: #378ADD; color: #fff;
+        padding: 8px 16px; border-radius: 6px;
+        font-size: 14px; font-weight: 600; margin-bottom: 16px;
+    }
+
+    h1 { font-size: 26px; margin-bottom: 20px; font-weight: 600; }
+    h2 { font-size: 18px; margin-bottom: 14px; font-weight: 600; }
+    h3 { font-size: 16px; margin-bottom: 12px; font-weight: 600; }
+    h4 { font-size: 13px; margin: 18px 0 8px; font-weight: 600; color: #555; }
+
+    .card {
+        background: #fff; border: 1px solid #ddd; border-radius: 8px;
+        padding: 20px; margin-bottom: 20px;
+    }
+    .card .note { color: #666; font-size: 13px; margin-bottom: 14px; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; font-weight: 600; }
+
+    input, select {
+        width: 100%; padding: 10px;
+        border: 1px solid #ddd; border-radius: 4px;
+        font-size: 14px; font-family: inherit; background: #fff;
+    }
+
+    button {
+        padding: 10px 16px; border: none; border-radius: 6px;
+        font-size: 14px; font-weight: 600; cursor: pointer;
+        background: #378ADD; color: #fff;
+    }
+    button:hover { background: #2563c4; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+    button.secondary { background: #f0f0f0; color: #333; }
+    button.secondary:hover { background: #e2e2e2; }
+    button.success { background: #10b981; }
+    button.success:hover { background: #059669; }
+    button.wide { width: 100%; }
+
+    /* 사유 · 조치 선택 */
+    .pick-btn {
+        border: 3px solid transparent;
+        padding: 11px 10px; width: 100%;
+        font-size: 13px; font-weight: 600;
+    }
+    .pick-btn.on { border-color: currentColor; }
+    .pick-btn.on::after { content: ' ✓'; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .status {
+        padding: 12px; border-radius: 6px; font-size: 13px;
+        background: #eff6ff; border: 1px solid #93c5fd; color: #1e40af;
+    }
+    .status.good { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .status.bad  { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+
+    .record {
+        padding: 12px; margin-bottom: 8px;
+        background: #fafafa; border-left: 4px solid #10b981;
+    }
+    .record.pending { border-left-color: #f59e0b; }
+    .record .top { font-weight: 600; color: #378ADD; font-size: 13px; }
+    .record .mid { margin: 3px 0; }
+    .record .bot { font-size: 12px; color: #666; }
+
+    .task {
+        padding: 12px; border-bottom: 1px solid #eee;
+        display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .task:last-child { border-bottom: none; }
+    .task .who { font-weight: 600; }
+    .task .when { font-size: 12px; color: #888; margin-top: 3px; }
+
+    .empty { color: #888; text-align: center; padding: 24px 12px; font-size: 13px; }
+
+    .modal {
+        display: none; position: fixed; inset: 0;
+        background: rgba(0,0,0,.5); z-index: 100;
+        align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal.on { display: flex; }
+    .modal .box { background: #fff; border-radius: 8px; padding: 24px; width: 100%; max-width: 460px; }
+    .modal p { margin: 12px 0 20px; color: #444; white-space: pre-line; }
+    .modal .grid-2 { gap: 12px; }
+    .modal button { padding: 12px 16px; }
+
+    .toast {
+        position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+        background: #111; color: #fff; padding: 12px 20px; border-radius: 8px;
+        font-size: 14px; font-weight: 600; z-index: 200; max-width: 90%; display: none;
+    }
+    .toast.on { display: block; }
+    .toast.bad { background: #b91c1c; }
+
+    table.list { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.list td { padding: 6px; border: 1px solid #e5e5e5; }
+    table.list tr.head td { background: #f2f2f2; font-weight: 600; }
+
+    @media (max-width: 768px) {
+        .container { grid-template-columns: 1fr; }
+        .hamburger { display: block; }
         .sidebar {
-            background: white;
-            border-right: 1px solid #ddd;
-            padding: 20px 0;
-            overflow-y: auto;
+            position: fixed; left: -220px; top: 0; bottom: 0; width: 200px;
+            z-index: 999; transition: left .25s; box-shadow: 2px 0 8px rgba(0,0,0,.15);
         }
-
-        .hamburger {
-            display: none;
-            position: fixed;
-            top: 12px; left: 12px;
-            z-index: 1000;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 20px;
-            padding: 4px 10px;
-            cursor: pointer;
-            color: #333;
-        }
-
-        .nav-item {
-            padding: 12px 16px;
-            cursor: pointer;
-            color: #666;
-            border-left: 3px solid transparent;
-            transition: all 0.2s;
-        }
-        .nav-item:hover { background: #f9f9f9; color: #333; }
-        .nav-item.active {
-            background: #f0f7ff;
-            border-left-color: #378ADD;
-            color: #378ADD;
-            font-weight: 600;
-        }
-
-        .main { padding: 32px; overflow-y: auto; }
-
-        .header-date {
-            display: inline-block;
-            background: #378ADD;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 16px;
-        }
-
-        h1 { font-size: 28px; margin-bottom: 24px; font-weight: 600; }
-        h2 { font-size: 18px; margin-bottom: 16px; font-weight: 600; }
-        h3 { font-size: 16px; margin-bottom: 12px; font-weight: 600; }
-        h4 { font-size: 14px; margin-bottom: 12px; font-weight: 600; margin-top: 16px; }
-
-        .card {
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
-        .form-group { margin-bottom: 12px; }
-        .form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; font-weight: 600; }
-
-        input, select, textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-            font-family: inherit;
-            background: white;
-        }
-
-        button {
-            padding: 10px 16px;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            background: #378ADD;
-            color: white;
-            transition: all 0.2s;
-        }
-        button:hover { background: #2563c4; }
-        button:disabled { opacity: 0.55; cursor: not-allowed; }
-        button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
-        button.secondary { background: #f0f0f0; color: #333; }
-        button.secondary:hover { background: #e0e0e0; }
-        button.success { background: #10b981; }
-        button.success:hover { background: #059669; }
-
-        /* 사유·조치 선택 버튼 */
-        .pick-btn {
-            border: 3px solid transparent;
-            padding: 10px 12px;
-            font-weight: 600;
-            font-size: 13px;
-            width: 100%;
-            position: relative;
-        }
-        .pick-btn.selected {
-            border-color: currentColor;
-            box-shadow: inset 0 0 0 2px rgba(255,255,255,0.6);
-        }
-        .pick-btn.selected::after {
-            content: ' ✓';
-        }
-
-        .pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
-        .button-group { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
-
-        .page { display: none; }
-        .page.active { display: block; }
-
-        .sync-status {
-            padding: 12px;
-            background: #eff6ff;
-            border: 1px solid #3b82f6;
-            border-radius: 6px;
-            margin-top: 12px;
-            font-size: 13px;
-            color: #1e40af;
-            line-height: 1.5;
-        }
-        .sync-status.success { background: #dcfce7; border-color: #10b981; color: #166534; }
-        .sync-status.error   { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
-
-        .history-item {
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-            border-left: 4px solid #3b82f6;
-            margin-bottom: 8px;
-            background: #fafafa;
-        }
-        .history-item.done { border-left-color: #10b981; }
-        .history-item .date { font-weight: 600; color: #378ADD; }
-        .history-item .reason { color: #444; margin: 4px 0; }
-        .history-item .status { font-size: 12px; color: #666; }
-
-        .task-item {
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-        }
-        .task-info { flex: 1; min-width: 0; }
-        .task-info .student { font-weight: 600; }
-        .task-info .detail { font-size: 12px; color: #888; margin-top: 4px; }
-
-        .empty {
-            color: #888;
-            text-align: center;
-            padding: 24px 12px;
-            font-size: 13px;
-            line-height: 1.6;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 100;
-            align-items: center;
-            justify-content: center;
-            padding: 16px;
-        }
-        .modal.active { display: flex; }
-        .modal-content {
-            background: white;
-            border-radius: 8px;
-            padding: 24px;
-            max-width: 480px;
-            width: 100%;
-        }
-        .modal-content p {
-            margin-bottom: 20px;
-            color: #444;
-            white-space: pre-line;
-            line-height: 1.6;
-        }
-        .modal .button-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-top: 0;
-        }
-        .modal .button-group button { padding: 12px 16px; }
-
-        .toast {
-            position: fixed;
-            left: 50%;
-            bottom: 24px;
-            transform: translateX(-50%);
-            background: #111;
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            z-index: 200;
-            max-width: 90%;
-            display: none;
-        }
-        .toast.show { display: block; }
-        .toast.error { background: #b91c1c; }
-
-        @media (max-width: 768px) {
-            .container { grid-template-columns: 1fr; }
-            .hamburger { display: block; }
-            .sidebar {
-                position: fixed;
-                left: -220px; top: 0; bottom: 0;
-                width: 200px;
-                z-index: 999;
-                transition: left 0.25s;
-                box-shadow: 2px 0 8px rgba(0,0,0,0.15);
-            }
-            .sidebar.active { left: 0; }
-            .main { padding: 56px 12px 24px; }
-            .form-row { grid-template-columns: 1fr; gap: 6px; }
-            .button-group { grid-template-columns: 1fr; }
-            .task-item { flex-direction: column; align-items: stretch; }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            * { transition: none !important; }
-        }
-    </style>
+        .sidebar.on { left: 0; }
+        .main { padding: 56px 12px 24px; }
+        .form-row, .grid-3 { grid-template-columns: 1fr; }
+        .task { flex-direction: column; align-items: stretch; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
 </head>
 <body>
-    <button class="hamburger" onclick="toggleSidebar()" aria-label="메뉴 열기">☰</button>
 
-    <div class="container">
-        <div class="sidebar" id="sidebar">
-            <div class="nav-item active" data-page="home">🏠 홈</div>
-            <div class="nav-item" data-page="review">✅ 미완료 과제</div>
-            <div class="nav-item" data-page="settings">🔧 설정</div>
-        </div>
+<button class="hamburger" onclick="toggleSidebar()" aria-label="메뉴">☰</button>
 
-        <div class="main">
-            <!-- 홈 -->
-            <div id="home" class="page active">
-                <div class="header-date js-date"></div>
-                <h1>📋 생활지도 관리</h1>
+<div class="container">
+    <nav class="sidebar" id="sidebar">
+        <div class="nav-item active" data-page="home">🏠 지도 입력</div>
+        <div class="nav-item" data-page="review">✅ 미완료 과제</div>
+        <div class="nav-item" data-page="settings">🔧 설정</div>
+    </nav>
 
-                <div class="card">
-                    <h2>📌 학생 찾기</h2>
+    <main class="main">
+        <!-- 지도 입력 -->
+        <section id="home" class="page active">
+            <div class="header-date js-date"></div>
+            <h1>생활지도 입력</h1>
 
-                    <div id="homeListStatus" class="sync-status" style="margin-top:0; margin-bottom:12px;">
-                        학생명단을 불러오는 중입니다…
-                    </div>
+            <div class="card">
+                <div id="listStatus" class="status" style="margin-bottom:14px;">학생명단을 불러오는 중…</div>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="inputGrade">학년</label>
-                            <select id="inputGrade" onchange="onGradeChange()">
-                                <option value="">선택</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="inputClass">반</label>
-                            <select id="inputClass" onchange="onClassChange()">
-                                <option value="">선택</option>
-                            </select>
-                        </div>
-                    </div>
-
+                <div class="form-row">
                     <div class="form-group">
-                        <label for="inputStudent">학생</label>
-                        <select id="inputStudent">
-                            <option value="">학년과 반을 먼저 선택하세요</option>
-                        </select>
+                        <label for="selGrade">학년</label>
+                        <select id="selGrade" onchange="onGrade()"><option value="">선택</option></select>
                     </div>
-
-                    <button onclick="queryRecords()" style="width:100%;">학생 불러오기</button>
-                </div>
-
-                <div id="studentPanel"></div>
-                <div id="historyPanel"></div>
-            </div>
-
-            <!-- 미완료 과제 -->
-            <div id="review" class="page">
-                <div class="header-date js-date"></div>
-                <h1>✅ 미완료 과제</h1>
-
-                <div class="card">
-                    <h2>밀린 과제 확인</h2>
-                    <p style="color:#666; margin-bottom:16px; font-size:13px; line-height:1.6;">
-                        지정했지만 아직 끝내지 않은 과제입니다. 오래된 순으로 보여줍니다.
-                    </p>
-                    <button onclick="loadUncompletedTasks()" style="width:100%;">목록 새로 고치기</button>
-                </div>
-
-                <div id="uncompletedContainer">
-                    <div class="card"><p class="empty">목록을 새로 고쳐 주세요.</p></div>
-                </div>
-            </div>
-
-            <!-- 설정 -->
-            <div id="settings" class="page">
-                <div class="header-date js-date"></div>
-                <h1>🔧 설정</h1>
-
-                <div class="card">
-                    <h2 style="color:#3b82f6;">📡 학생명단</h2>
-                    <p style="color:#666; margin-bottom:16px; font-size:13px; line-height:1.6;">
-                        스프레드시트의 학생명단을 불러옵니다. 명단을 고쳤다면 여기서 다시 불러오세요.
-                    </p>
-                    <button onclick="loadStudentList()" style="width:100%;">학생명단 다시 불러오기</button>
-                    <div id="syncStatus" class="sync-status" style="display:none;"></div>
-                </div>
-
-                <div class="card">
-                    <h2 style="color:#10b981;">🔌 서버 연결 확인</h2>
-                    <p style="color:#666; margin-bottom:16px; font-size:13px; line-height:1.6;">
-                        Apps Script 웹앱과 통신이 되는지 확인합니다. 저장이 안 될 때 먼저 눌러 보세요.
-                    </p>
-                    <button class="success" onclick="pingServer()" style="width:100%;">연결 확인</button>
-                    <div id="pingStatus" class="sync-status" style="display:none;"></div>
-                </div>
-
-                <div class="card">
-                    <h2>📖 불러온 명단</h2>
-                    <div id="studentListPreview" style="max-height:320px; overflow-y:auto; font-size:12px;">
-                        <p class="empty">아직 명단이 없습니다.</p>
+                    <div class="form-group">
+                        <label for="selClass">반</label>
+                        <select id="selClass" onchange="onClass()"><option value="">선택</option></select>
                     </div>
                 </div>
+
+                <div class="form-group">
+                    <label for="selStudent">학생</label>
+                    <select id="selStudent" onchange="onStudent()">
+                        <option value="">학년과 반을 먼저 고르세요</option>
+                    </select>
+                </div>
             </div>
+
+            <div id="panel"></div>
+            <div id="history"></div>
+        </section>
+
+        <!-- 미완료 과제 -->
+        <section id="review" class="page">
+            <div class="header-date js-date"></div>
+            <h1>미완료 과제</h1>
+
+            <div class="card">
+                <p class="note">지정했지만 아직 끝내지 않은 과제입니다. 오래된 순으로 보여줍니다.</p>
+                <button class="wide" onclick="loadTasks()">목록 새로 고치기</button>
+            </div>
+
+            <div id="tasks"><div class="card"><p class="empty">목록을 새로 고쳐 주세요.</p></div></div>
+        </section>
+
+        <!-- 설정 -->
+        <section id="settings" class="page">
+            <div class="header-date js-date"></div>
+            <h1>설정</h1>
+
+            <div class="card">
+                <h2>서버 연결 확인</h2>
+                <p class="note">저장이 안 될 때 여기부터 확인하세요. 버전이 2.0으로 나와야 정상입니다.</p>
+                <button class="success wide" onclick="ping()">연결 확인</button>
+                <div id="pingStatus" class="status" style="display:none; margin-top:12px;"></div>
+            </div>
+
+            <div class="card">
+                <h2>학생명단</h2>
+                <p class="note">명단 시트를 고쳤다면 여기서 다시 불러오세요.</p>
+                <button class="wide" onclick="loadStudents()">학생명단 다시 불러오기</button>
+                <div id="preview" style="max-height:320px; overflow-y:auto; margin-top:16px;">
+                    <p class="empty">아직 명단이 없습니다.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<div class="modal" id="modal">
+    <div class="box">
+        <h3 id="modalTitle">확인</h3>
+        <p id="modalText"></p>
+        <div class="grid-2">
+            <button class="secondary" onclick="closeModal()">취소</button>
+            <button id="modalOk" onclick="runModal()">확인</button>
         </div>
     </div>
+</div>
 
-    <!-- 확인 모달 -->
-    <div class="modal" id="confirmModal">
-        <div class="modal-content">
-            <h3 id="confirmTitle">확인</h3>
-            <p id="confirmMessage"></p>
-            <div class="button-group">
-                <button class="secondary" onclick="closeConfirm()">취소</button>
-                <button id="confirmOkBtn" onclick="runConfirm()">확인</button>
-            </div>
-        </div>
-    </div>
+<div class="toast" id="toast"></div>
 
-    <div class="toast" id="toast"></div>
+<script>
+// ============================================================
+// 설정 — 웹앱 주소가 바뀌면 이 줄만 고치면 됩니다.
+// ============================================================
+const API = 'https://script.google.com/macros/s/AKfycbzpJp67153R8Cm_y8SfCAZtWJ-mvN5FHetBNYEpl687qwZGCoh7LlCOckPpehedCOBl/exec';
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <script>
-    // ============================================================
-    // 설정
-    // ============================================================
-    const SHEET_ID = '1FzZaqtdiTHpULtzAJSC-sLEkRVcYJWrNc1JVEe0jDyA';
-    const STUDENT_GID = '0';               // 학생명단 시트의 gid
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzpJp67153R8Cm_y8SfCAZtWJ-mvN5FHetBNYEpl687qwZGCoh7LlCOckPpehedCOBl/exec';
+const REASONS = [
+    { key: '지각', bg: '#fef3c7', fg: '#92400e' },
+    { key: '복장', bg: '#fce7f3', fg: '#831843' },
+    { key: '화장', bg: '#f3e8ff', fg: '#581c87' },
+    { key: '기타', bg: '#ccfbf1', fg: '#134e4a' }
+];
 
-    const REASONS = [
-        { key: '지각', bg: '#fef3c7', fg: '#92400e' },
-        { key: '복장', bg: '#fce7f3', fg: '#831843' },
-        { key: '화장', bg: '#f3e8ff', fg: '#581c87' },
-        { key: '기타', bg: '#ccfbf1', fg: '#134e4a' }
-    ];
+const TASKS = [
+    { key: 'work',       name: '빡지', icon: '📝', bg: '#e0e7ff', fg: '#4338ca' },
+    { key: 'clean',      name: '청소', icon: '✨', bg: '#cffafe', fg: '#0c4a6e' },
+    { key: 'inspection', name: '검사', icon: '🔍', bg: '#dbeafe', fg: '#0c2d6b' }
+];
+const TASK_NAME = { work: '빡지', clean: '청소', inspection: '검사' };
 
-    const TASKS = [
-        { key: 'work',       label: '📝 빡지', bg: '#e0e7ff', fg: '#4338ca' },
-        { key: 'clean',      label: '✨ 청소', bg: '#cffafe', fg: '#0c4a6e' },
-        { key: 'inspection', label: '🔍 검사', bg: '#dbeafe', fg: '#0c2d6b' }
-    ];
-    const TASK_LABEL = { work: '빡지', clean: '청소', inspection: '검사' };
+// ============================================================
+// 상태
+// ============================================================
+let students = [];
+let student  = null;
+let reasons  = new Set();
+let tasks    = new Set();
+let taskList = [];
+let modalAction = null;
 
-    // ============================================================
-    // 상태
-    // ============================================================
-    let studentList = [];
-    let currentStudent = null;
-    let selectedReason = '';
-    let selectedTasks = new Set();
-    let uncompletedList = [];
-    let confirmAction = null;
+// ============================================================
+// 서버 통신
+// Content-Type 은 반드시 text/plain 이어야 합니다.
+// application/json 으로 보내면 브라우저가 사전 요청(OPTIONS)을 보내는데
+// Apps Script 웹앱은 이를 처리하지 못해 요청이 실패합니다.
+// ============================================================
+async function call(payload) {
+    let res;
+    try {
+        res = await fetch(API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload),
+            redirect: 'follow'
+        });
+    } catch (e) {
+        throw new Error('서버에 연결하지 못했습니다. 웹앱 주소와 인터넷 연결을 확인하세요.');
+    }
 
-    // ============================================================
-    // 시작
-    // ============================================================
-    window.addEventListener('load', function () {
-        updateDates();
-        bindNav();
-        loadStudentList(true);
+    const text = await res.text();
+    let json;
+    try {
+        json = JSON.parse(text);
+    } catch (e) {
+        throw new Error('서버가 JSON 대신 로그인 화면을 보냈습니다. 웹앱을 "모든 사용자" 액세스로 다시 배포하세요.');
+    }
+
+    if (!json.success) throw new Error(json.message || '요청을 처리하지 못했습니다.');
+    return json;
+}
+
+async function ping() {
+    const el = show('pingStatus', '', '확인 중…');
+    try {
+        const r = await call({ action: 'ping' });
+        const v = r.data.version;
+        if (v === '2.0') {
+            show('pingStatus', 'good', '연결 정상입니다. 서버 버전 ' + v + ' · 오늘 ' + r.data.today);
+        } else {
+            show('pingStatus', 'bad', '예전 코드가 배포돼 있습니다 (버전 ' + v + '). 배포 관리에서 "새 버전"으로 다시 배포하세요.');
+        }
+    } catch (e) {
+        show('pingStatus', 'bad', e.message);
+    }
+}
+
+function show(id, kind, text) {
+    const el = document.getElementById(id);
+    el.style.display = 'block';
+    el.className = 'status' + (kind ? ' ' + kind : '');
+    el.textContent = text;
+    return el;
+}
+
+// ============================================================
+// 학생명단
+// ============================================================
+async function loadStudents() {
+    show('listStatus', '', '학생명단을 불러오는 중…');
+    try {
+        const r = await call({ action: 'getStudents' });
+        students = r.data || [];
+
+        if (students.length === 0) {
+            show('listStatus', 'bad', '학생명단이 비어 있습니다. 명단 시트를 확인해 주세요.');
+            return;
+        }
+
+        show('listStatus', 'good', '학생 ' + students.length + '명 준비됨');
+        fillGrades();
+        renderPreview();
+    } catch (e) {
+        show('listStatus', 'bad', e.message);
+    }
+}
+
+function fillGrades() {
+    const list = [...new Set(students.map(s => s.grade))].sort((a, b) => a - b);
+    const sel = document.getElementById('selGrade');
+    sel.innerHTML = '<option value="">선택</option>' +
+        list.map(g => `<option value="${g}">${g}학년</option>`).join('');
+}
+
+function onGrade() {
+    const grade = +document.getElementById('selGrade').value;
+    const list = [...new Set(students.filter(s => s.grade === grade).map(s => s.class))]
+                 .sort((a, b) => a - b);
+    document.getElementById('selClass').innerHTML = '<option value="">선택</option>' +
+        list.map(c => `<option value="${c}">${c}반</option>`).join('');
+    onClass();
+}
+
+function onClass() {
+    const grade = +document.getElementById('selGrade').value;
+    const cls   = +document.getElementById('selClass').value;
+    const sel   = document.getElementById('selStudent');
+
+    if (!grade || !cls) {
+        sel.innerHTML = '<option value="">학년과 반을 먼저 고르세요</option>';
+        clearPanel();
+        return;
+    }
+
+    const list = students.filter(s => s.grade === grade && s.class === cls)
+                         .sort((a, b) => a.number - b.number);
+
+    // 번호를 값으로 쓰므로 이름이 같은 학생도 구분됩니다.
+    sel.innerHTML = '<option value="">선택</option>' +
+        list.map(s => `<option value="${s.number}">${s.number}번 ${esc(s.name)}</option>`).join('');
+    clearPanel();
+}
+
+// 학생을 고르는 즉시 입력 카드와 지도내역이 함께 뜹니다.
+function onStudent() {
+    const grade  = +document.getElementById('selGrade').value;
+    const cls    = +document.getElementById('selClass').value;
+    const number = +document.getElementById('selStudent').value;
+
+    if (!number) { clearPanel(); return; }
+
+    student = students.find(s => s.grade === grade && s.class === cls && s.number === number);
+    if (!student) { clearPanel(); return; }
+
+    reasons = new Set();
+    tasks   = new Set();
+    renderPanel();
+    loadHistory();
+}
+
+function clearPanel() {
+    student = null;
+    document.getElementById('panel').innerHTML = '';
+    document.getElementById('history').innerHTML = '';
+}
+
+// ============================================================
+// 입력 카드
+// ============================================================
+function renderPanel() {
+    const reasonBtns = REASONS.map(r =>
+        `<button type="button" class="pick-btn" id="r-${r.key}"
+                 style="background:${r.bg}; color:${r.fg}"
+                 onclick="pickReason('${r.key}')">${r.key}</button>`).join('');
+
+    const taskBtns = TASKS.map(t =>
+        `<button type="button" class="pick-btn" id="t-${t.key}"
+                 style="background:${t.bg}; color:${t.fg}"
+                 onclick="pickTask('${t.key}')">${t.icon} ${t.name}</button>`).join('');
+
+    document.getElementById('panel').innerHTML = `
+        <div class="card" style="background:#f0f9ff; border-left:4px solid #3b82f6;">
+            <h3>${student.grade}학년 ${student.class}반 ${student.number}번 ${esc(student.name)}</h3>
+
+            <h4>지도 사유 — 여러 개 고를 수 있습니다</h4>
+            <div class="grid-2">${reasonBtns}</div>
+            <input type="text" id="reasonEtc" placeholder="기타 사유를 입력하세요"
+                   style="display:none; margin-top:8px;">
+
+            <h4>조치 — 여러 개 고를 수 있습니다</h4>
+            <div class="grid-3">${taskBtns}</div>
+            <p style="font-size:12px; color:#666; margin-top:8px;">
+                조치를 고르지 않으면 사유만 기록합니다.
+            </p>
+
+            <button class="wide" style="margin-top:18px;" onclick="askSave()">기록 저장</button>
+        </div>`;
+}
+
+function pickReason(key) {
+    reasons.has(key) ? reasons.delete(key) : reasons.add(key);
+    document.getElementById('r-' + key).classList.toggle('on', reasons.has(key));
+
+    const etc = document.getElementById('reasonEtc');
+    etc.style.display = reasons.has('기타') ? 'block' : 'none';
+    if (reasons.has('기타')) etc.focus();
+}
+
+function pickTask(key) {
+    tasks.has(key) ? tasks.delete(key) : tasks.add(key);
+    document.getElementById('t-' + key).classList.toggle('on', tasks.has(key));
+}
+
+// ============================================================
+// 저장 — 지도 한 건마다 새 행 하나
+// ============================================================
+function askSave() {
+    if (!student) return;
+    if (reasons.size === 0) return toast('지도 사유를 고르세요.', true);
+
+    // 고른 순서가 아니라 늘 같은 순서로 정리해서 저장합니다.
+    const picked = REASONS.map(r => r.key).filter(k => reasons.has(k) && k !== '기타');
+
+    if (reasons.has('기타')) {
+        const etc = document.getElementById('reasonEtc').value.trim();
+        if (!etc) return toast('기타 사유를 입력하세요.', true);
+        picked.push(etc);
+    }
+
+    const reasonText = picked.join(', ');
+    const taskKeys   = TASKS.map(t => t.key).filter(k => tasks.has(k));
+    const taskText   = taskKeys.length
+        ? taskKeys.map(k => TASK_NAME[k]).join(', ') + ' 지정'
+        : '조치 없이 기록만';
+
+    const payload = {
+        action: 'save',
+        date: today(),
+        grade: student.grade,
+        class: student.class,
+        number: student.number,
+        name: student.name,
+        reason: reasonText,
+        tasks: taskKeys
+    };
+
+    openModal('기록 저장',
+        `${student.name} 학생\n사유: ${reasonText}\n${taskText}`,
+        '저장',
+        () => save(payload));
+}
+
+async function save(payload) {
+    try {
+        await call(payload);
+        toast('저장했습니다.');
+        reasons = new Set();
+        tasks   = new Set();
+        renderPanel();     // 같은 학생을 이어서 지도할 수 있게 카드는 남겨 둡니다.
+        loadHistory();
+    } catch (e) {
+        toast(e.message, true);
+    }
+}
+
+// ============================================================
+// 지도내역 — 전체 기록, 최신순
+// ============================================================
+async function loadHistory() {
+    const box = document.getElementById('history');
+    box.innerHTML = '<div class="card"><p class="empty">지도내역을 불러오는 중…</p></div>';
+
+    try {
+        const r = await call({
+            action: 'getRecords',
+            grade: student.grade,
+            class: student.class,
+            number: student.number,
+            name: student.name
+        });
+        renderHistory(r.data || []);
+    } catch (e) {
+        box.innerHTML = `<div class="card"><p class="empty" style="color:#991b1b;">${esc(e.message)}</p></div>`;
+    }
+}
+
+function renderHistory(records) {
+    const box = document.getElementById('history');
+
+    if (records.length === 0) {
+        box.innerHTML = '<div class="card"><h3>지도내역</h3><p class="empty">아직 기록이 없습니다.</p></div>';
+        return;
+    }
+
+    const items = records.map(r => {
+        const marks = [];
+        let pending = false;
+
+        TASKS.forEach(t => {
+            const a = r['assigned'  + cap(t.key)];
+            const c = r['completed' + cap(t.key)];
+            if (a !== 'Y') return;
+            const done = c === 'Y';
+            if (!done) pending = true;
+            marks.push(t.name + (done ? ' 완료' : ' 미완료'));
+        });
+
+        return `<div class="record${pending ? ' pending' : ''}">
+                    <div class="top">${esc(r.date)}</div>
+                    <div class="mid">${esc(r.reason)}</div>
+                    <div class="bot">${marks.length ? esc(marks.join(' · ')) : '기록만'}</div>
+                </div>`;
+    }).join('');
+
+    box.innerHTML = `<div class="card"><h3>지도내역 ${records.length}건</h3>${items}</div>`;
+}
+
+function cap(key) {
+    // work → Work, clean → Clean, inspection → Inspection
+    return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+// ============================================================
+// 미완료 과제
+// ============================================================
+async function loadTasks() {
+    const box = document.getElementById('tasks');
+    box.innerHTML = '<div class="card"><p class="empty">불러오는 중…</p></div>';
+
+    try {
+        const r = await call({ action: 'getUncompletedTasks' });
+        taskList = r.data || [];
+        renderTasks();
+    } catch (e) {
+        box.innerHTML = `<div class="card"><p class="empty" style="color:#991b1b;">${esc(e.message)}</p></div>`;
+    }
+}
+
+function renderTasks() {
+    const box = document.getElementById('tasks');
+
+    if (taskList.length === 0) {
+        box.innerHTML = '<div class="card" style="background:#dcfce7; border-color:#86efac;">' +
+                        '<p class="empty" style="color:#166534;">밀린 과제가 없습니다.</p></div>';
+        return;
+    }
+
+    let html = '';
+
+    TASKS.forEach(t => {
+        const items = taskList
+            .map((task, i) => ({ task, i }))
+            .filter(o => o.task.type === t.key);
+
+        if (items.length === 0) return;
+
+        html += `<div class="card" style="border-left:4px solid ${t.fg};">
+            <h3 style="color:${t.fg}">${t.icon} ${t.name} 미완료 ${items.length}건</h3>` +
+            items.map(o => {
+                const s = o.task;
+                return `<div class="task">
+                    <div>
+                        <div class="who">${s.grade}학년 ${s.class}반 ${s.number}번 ${esc(s.name)}</div>
+                        <div class="when">${esc(s.date)} · ${esc(s.reason)}</div>
+                    </div>
+                    <button class="success" onclick="askComplete(${o.i})">완료 처리</button>
+                </div>`;
+            }).join('') + '</div>';
     });
 
-    function bindNav() {
-        document.querySelectorAll('.nav-item').forEach(function (item) {
-            item.addEventListener('click', function () {
-                switchPage(item.dataset.page, item);
-            });
+    box.innerHTML = html;
+}
+
+function askComplete(i) {
+    const t = taskList[i];
+    if (!t) return;
+
+    openModal('완료 처리',
+        `${t.name} 학생\n${t.date} · ${t.reason}\n${TASK_NAME[t.type]}를 완료로 표시합니다.`,
+        '완료 처리',
+        () => complete(t));
+}
+
+async function complete(t) {
+    try {
+        // row 를 함께 보내 목록에서 누른 바로 그 기록만 완료 처리합니다.
+        await call({
+            action: 'complete',
+            row: t.row,
+            type: t.type,
+            grade: t.grade,
+            class: t.class,
+            number: t.number,
+            name: t.name
         });
+        toast(TASK_NAME[t.type] + ' 완료로 표시했습니다.');
+    } catch (e) {
+        toast(e.message, true);
     }
-
-    function switchPage(name, navEl) {
-        document.querySelectorAll('.page').forEach(function (p) { p.classList.remove('active'); });
-        document.getElementById(name).classList.add('active');
-        document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.remove('active'); });
-        if (navEl) navEl.classList.add('active');
-        document.getElementById('sidebar').classList.remove('active');
-        window.scrollTo(0, 0);
-    }
-
-    function toggleSidebar() {
-        document.getElementById('sidebar').classList.toggle('active');
-    }
-
-    // ============================================================
-    // 서버 통신
-    // 중요: Content-Type 을 text/plain 으로 보냅니다.
-    // application/json 으로 보내면 브라우저가 사전 요청(OPTIONS)을 보내는데,
-    // Apps Script 웹앱은 이를 처리하지 못해 요청 자체가 실패합니다.
-    // ============================================================
-    async function callScript(payload) {
-        let res;
-        try {
-            res = await fetch(APPS_SCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload),
-                redirect: 'follow'
-            });
-        } catch (err) {
-            throw new Error('서버에 연결하지 못했습니다. 웹앱 주소와 인터넷 연결을 확인하세요.');
-        }
-
-        const text = await res.text();
-        let json;
-        try {
-            json = JSON.parse(text);
-        } catch (err) {
-            throw new Error('서버가 JSON 대신 로그인 화면을 보냈습니다. 웹앱을 "모든 사용자" 액세스로 다시 배포하세요.');
-        }
-
-        if (!json.success) throw new Error(json.message || '요청을 처리하지 못했습니다.');
-        return json;
-    }
-
-    async function pingServer() {
-        const el = document.getElementById('pingStatus');
-        el.style.display = 'block';
-        el.className = 'sync-status';
-        el.textContent = '확인 중…';
-        try {
-            const res = await callScript({ action: 'ping' });
-            el.className = 'sync-status success';
-            el.textContent = '연결 정상입니다. 서버 날짜: ' + res.data.time;
-        } catch (err) {
-            el.className = 'sync-status error';
-            el.textContent = err.message;
-        }
-    }
-
-    // ============================================================
-    // 학생명단 (스프레드시트 CSV)
-    // ============================================================
-    async function loadStudentList(silent) {
-        const settingsEl = document.getElementById('syncStatus');
-        const homeEl = document.getElementById('homeListStatus');
-
-        settingsEl.style.display = 'block';
-        settingsEl.className = 'sync-status';
-        settingsEl.textContent = '불러오는 중…';
-        homeEl.className = 'sync-status';
-        homeEl.textContent = '학생명단을 불러오는 중입니다…';
-
-        const url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID +
-                    '/export?format=csv&gid=' + STUDENT_GID + '&t=' + Date.now();
-
-        try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('상태 코드 ' + res.status);
-
-            const csv = await res.text();
-            if (csv.trim().indexOf('<') === 0) {
-                throw new Error('스프레드시트를 "링크가 있는 모든 사용자 · 뷰어"로 공유해 주세요.');
-            }
-
-            const parsed = Papa.parse(csv, { header: false, skipEmptyLines: true });
-            const rows = parsed.data.slice(1);   // 첫 줄은 제목
-
-            studentList = rows
-                .filter(function (r) { return r[0] && r[1] && r[2] && r[3]; })
-                .map(function (r) {
-                    return {
-                        grade: parseInt(r[0], 10),
-                        class: parseInt(r[1], 10),
-                        number: parseInt(r[2], 10),
-                        name: String(r[3]).trim()
-                    };
-                })
-                .filter(function (s) { return s.grade && s.class && s.number && s.name; });
-
-            if (studentList.length === 0) {
-                throw new Error('명단이 비어 있습니다. 시트의 열 순서가 학년·반·번호·이름인지 확인하세요.');
-            }
-
-            settingsEl.className = 'sync-status success';
-            settingsEl.textContent = studentList.length + '명을 불러왔습니다.';
-            homeEl.className = 'sync-status success';
-            homeEl.textContent = '학생 ' + studentList.length + '명 준비됨';
-
-            fillGradeSelect();
-            renderStudentPreview();
-
-        } catch (err) {
-            const msg = '명단을 불러오지 못했습니다. ' + err.message;
-            settingsEl.className = 'sync-status error';
-            settingsEl.textContent = msg;
-            homeEl.className = 'sync-status error';
-            homeEl.textContent = msg;
-            if (!silent) showToast(msg, true);
-        }
-    }
-
-    function fillGradeSelect() {
-        const grades = Array.from(new Set(studentList.map(function (s) { return s.grade; })))
-                            .sort(function (a, b) { return a - b; });
-        const sel = document.getElementById('inputGrade');
-        sel.innerHTML = '<option value="">선택</option>';
-        grades.forEach(function (g) {
-            sel.insertAdjacentHTML('beforeend', '<option value="' + g + '">' + g + '학년</option>');
-        });
-    }
-
-    function onGradeChange() {
-        const grade = parseInt(document.getElementById('inputGrade').value, 10);
-        const sel = document.getElementById('inputClass');
-        sel.innerHTML = '<option value="">선택</option>';
-
-        if (grade) {
-            const classes = Array.from(new Set(
-                studentList.filter(function (s) { return s.grade === grade; })
-                           .map(function (s) { return s.class; })
-            )).sort(function (a, b) { return a - b; });
-
-            classes.forEach(function (c) {
-                sel.insertAdjacentHTML('beforeend', '<option value="' + c + '">' + c + '반</option>');
-            });
-        }
-        onClassChange();
-    }
-
-    function onClassChange() {
-        const grade = parseInt(document.getElementById('inputGrade').value, 10);
-        const cls = parseInt(document.getElementById('inputClass').value, 10);
-        const sel = document.getElementById('inputStudent');
-
-        if (!grade || !cls) {
-            sel.innerHTML = '<option value="">학년과 반을 먼저 선택하세요</option>';
-            return;
-        }
-
-        const students = studentList
-            .filter(function (s) { return s.grade === grade && s.class === cls; })
-            .sort(function (a, b) { return a.number - b.number; });
-
-        sel.innerHTML = '<option value="">선택</option>';
-        students.forEach(function (s) {
-            // 번호를 값으로 쓰면 이름이 같은 학생도 구분됩니다.
-            sel.insertAdjacentHTML('beforeend',
-                '<option value="' + s.number + '">' + s.number + '번 ' + escapeHtml(s.name) + '</option>');
-        });
-    }
-
-    // ============================================================
-    // 학생 조회
-    // ============================================================
-    async function queryRecords() {
-        const grade = parseInt(document.getElementById('inputGrade').value, 10);
-        const cls = parseInt(document.getElementById('inputClass').value, 10);
-        const number = parseInt(document.getElementById('inputStudent').value, 10);
-
-        if (!grade || !cls || !number) {
-            showToast('학년, 반, 학생을 모두 선택하세요.', true);
-            return;
-        }
-
-        const student = studentList.find(function (s) {
-            return s.grade === grade && s.class === cls && s.number === number;
-        });
-        if (!student) {
-            showToast('명단에서 학생을 찾지 못했습니다.', true);
-            return;
-        }
-
-        currentStudent = student;
-        selectedReason = '';
-        selectedTasks = new Set();
-
-        renderStudentPanel(student);
-
-        document.getElementById('historyPanel').innerHTML =
-            '<div class="card"><p class="empty">지도내역을 불러오는 중…</p></div>';
-
-        try {
-            const res = await callScript({
-                action: 'getRecords',
-                grade: student.grade,
-                class: student.class,
-                number: student.number,
-                name: student.name
-            });
-            renderHistory(res.data || []);
-        } catch (err) {
-            document.getElementById('historyPanel').innerHTML =
-                '<div class="card"><p class="empty" style="color:#991b1b;">' +
-                escapeHtml(err.message) + '</p></div>';
-        }
-    }
-
-    function renderStudentPanel(s) {
-        const reasonBtns = REASONS.map(function (r) {
-            return '<button type="button" class="pick-btn" id="reason-' + r.key + '" ' +
-                   'style="background:' + r.bg + '; color:' + r.fg + ';" ' +
-                   'onclick="pickReason(\'' + r.key + '\')">' + r.key + '</button>';
-        }).join('');
-
-        const taskBtns = TASKS.map(function (t) {
-            return '<button type="button" class="pick-btn" id="task-' + t.key + '" ' +
-                   'style="background:' + t.bg + '; color:' + t.fg + ';" ' +
-                   'onclick="toggleTask(\'' + t.key + '\')">' + t.label + '</button>';
-        }).join('');
-
-        document.getElementById('studentPanel').innerHTML =
-            '<div class="card" style="background:#f0f9ff; border-left:4px solid #3b82f6;">' +
-                '<h3>' + s.grade + '학년 ' + s.class + '반 ' + s.number + '번 ' + escapeHtml(s.name) + '</h3>' +
-
-                '<h4>지도 사유</h4>' +
-                '<div class="pick-grid">' + reasonBtns + '</div>' +
-                '<input type="text" id="inputReasonOther" placeholder="사유를 직접 입력" ' +
-                       'style="margin-bottom:12px; display:none;">' +
-
-                '<h4>조치 (여러 개 선택 가능)</h4>' +
-                '<div class="button-group">' + taskBtns + '</div>' +
-                '<p style="font-size:12px; color:#666; margin-top:10px;">' +
-                    '아무것도 고르지 않으면 사유만 기록합니다.' +
-                '</p>' +
-
-                '<button onclick="prepareSave()" style="width:100%; margin-top:16px;">기록 저장</button>' +
-            '</div>';
-    }
-
-    function pickReason(key) {
-        selectedReason = key;
-        REASONS.forEach(function (r) {
-            document.getElementById('reason-' + r.key).classList.toggle('selected', r.key === key);
-        });
-        const other = document.getElementById('inputReasonOther');
-        other.style.display = (key === '기타') ? 'block' : 'none';
-        if (key === '기타') other.focus();
-    }
-
-    function toggleTask(key) {
-        if (selectedTasks.has(key)) selectedTasks.delete(key);
-        else selectedTasks.add(key);
-        document.getElementById('task-' + key).classList.toggle('selected', selectedTasks.has(key));
-    }
-
-    // ============================================================
-    // 저장
-    // ============================================================
-    function prepareSave() {
-        if (!currentStudent) return;
-
-        if (!selectedReason) {
-            showToast('지도 사유를 선택하세요.', true);
-            return;
-        }
-
-        let reason = selectedReason;
-        if (selectedReason === '기타') {
-            reason = document.getElementById('inputReasonOther').value.trim();
-            if (!reason) {
-                showToast('기타 사유를 입력하세요.', true);
-                return;
-            }
-        }
-
-        const tasks = Array.from(selectedTasks);
-        const payload = {
-            action: 'save',
-            date: getTodayDate(),
-            grade: currentStudent.grade,
-            class: currentStudent.class,
-            number: currentStudent.number,
-            name: currentStudent.name,
-            reason: reason,
-            tasks: tasks
-        };
-
-        const taskText = tasks.length
-            ? tasks.map(function (t) { return TASK_LABEL[t]; }).join(', ') + ' 지정'
-            : '조치 없이 기록만 저장';
-
-        openConfirm(
-            '기록 저장',
-            currentStudent.name + ' 학생\n사유: ' + reason + '\n' + taskText,
-            '저장',
-            function () { saveRecord(payload); }
-        );
-    }
-
-    async function saveRecord(payload) {
-        try {
-            await callScript(payload);
-            showToast('저장했습니다.');
-
-            selectedReason = '';
-            selectedTasks = new Set();
-            document.getElementById('studentPanel').innerHTML = '';
-            document.getElementById('historyPanel').innerHTML = '';
-            document.getElementById('inputStudent').value = '';
-            currentStudent = null;
-        } catch (err) {
-            showToast(err.message, true);
-        }
-    }
-
-    // ============================================================
-    // 지도내역
-    // ============================================================
-    function renderHistory(records) {
-        if (records.length === 0) {
-            document.getElementById('historyPanel').innerHTML =
-                '<div class="card"><h4>지도내역</h4><p class="empty">아직 기록이 없습니다.</p></div>';
-            return;
-        }
-
-        const items = records.map(function (r) {
-            const marks = [];
-            if (r.assignedWork === 'Y')       marks.push(r.completedWork === 'Y' ? '빡지 완료' : '빡지 미완료');
-            if (r.assignedClean === 'Y')      marks.push(r.completedClean === 'Y' ? '청소 완료' : '청소 미완료');
-            if (r.assignedInspection === 'Y') marks.push(r.completedInspection === 'Y' ? '검사 완료' : '검사 미완료');
-
-            const pending = marks.some(function (m) { return m.indexOf('미완료') > -1; });
-            const status = marks.length ? marks.join(' · ') : '기록만';
-
-            return '<div class="history-item' + (pending ? '' : ' done') + '">' +
-                       '<div class="date">' + escapeHtml(r.date) + '</div>' +
-                       '<div class="reason">' + escapeHtml(r.reason) + '</div>' +
-                       '<div class="status">' + escapeHtml(status) + '</div>' +
-                   '</div>';
-        }).join('');
-
-        document.getElementById('historyPanel').innerHTML =
-            '<div class="card"><h4>지도내역 (' + records.length + '건)</h4>' + items + '</div>';
-    }
-
-    // ============================================================
-    // 미완료 과제
-    // ============================================================
-    async function loadUncompletedTasks() {
-        const box = document.getElementById('uncompletedContainer');
-        box.innerHTML = '<div class="card"><p class="empty">불러오는 중…</p></div>';
-
-        try {
-            const res = await callScript({ action: 'getUncompletedTasks' });
-            uncompletedList = res.data || [];
-            renderUncompleted();
-        } catch (err) {
-            box.innerHTML = '<div class="card"><p class="empty" style="color:#991b1b;">' +
-                            escapeHtml(err.message) + '</p></div>';
-        }
-    }
-
-    function renderUncompleted() {
-        const box = document.getElementById('uncompletedContainer');
-
-        if (uncompletedList.length === 0) {
-            box.innerHTML = '<div class="card" style="background:#dcfce7;">' +
-                            '<p class="empty" style="color:#166534;">밀린 과제가 없습니다.</p></div>';
-            return;
-        }
-
-        let html = '';
-        TASKS.forEach(function (t) {
-            const items = uncompletedList
-                .map(function (task, idx) { return { task: task, idx: idx }; })
-                .filter(function (o) { return o.task.type === t.key; });
-
-            if (items.length === 0) return;
-
-            html += '<div class="card" style="border-left:4px solid ' + t.bg + ';">' +
-                    '<h3 style="color:' + t.fg + ';">' + t.label + ' 미완료 (' + items.length + '명)</h3>' +
-                    items.map(function (o) {
-                        const s = o.task;
-                        return '<div class="task-item">' +
-                                   '<div class="task-info">' +
-                                       '<div class="student">' + s.grade + '학년 ' + s.class + '반 ' +
-                                           s.number + '번 ' + escapeHtml(s.name) + '</div>' +
-                                       '<div class="detail">' + escapeHtml(s.date) + ' · ' +
-                                           escapeHtml(s.reason) + '</div>' +
-                                   '</div>' +
-                                   '<button class="success" onclick="askComplete(' + o.idx + ')">완료 처리</button>' +
-                               '</div>';
-                    }).join('') +
-                    '</div>';
-        });
-
-        box.innerHTML = html;
-    }
-
-    function askComplete(idx) {
-        const t = uncompletedList[idx];
-        if (!t) return;
-
-        openConfirm(
-            '완료 처리',
-            t.name + ' 학생\n' + t.date + ' · ' + t.reason + '\n' + TASK_LABEL[t.type] + '를 완료로 표시합니다.',
-            '완료 처리',
-            function () { completeTask(t); }
-        );
-    }
-
-    async function completeTask(t) {
-        try {
-            // row 를 함께 보내 목록에서 누른 바로 그 기록만 완료 처리합니다.
-            await callScript({
-                action: 'complete',
-                row: t.row,
-                type: t.type,
-                grade: t.grade,
-                class: t.class,
-                number: t.number,
-                name: t.name
-            });
-            showToast(TASK_LABEL[t.type] + ' 완료로 표시했습니다.');
-            loadUncompletedTasks();
-        } catch (err) {
-            showToast(err.message, true);
-            loadUncompletedTasks();
-        }
-    }
-
-    // ============================================================
-    // 모달 · 토스트
-    // ============================================================
-    function openConfirm(title, message, okLabel, action) {
-        document.getElementById('confirmTitle').textContent = title;
-        document.getElementById('confirmMessage').textContent = message;
-        document.getElementById('confirmOkBtn').textContent = okLabel;
-        confirmAction = action;
-        document.getElementById('confirmModal').classList.add('active');
-    }
-
-    function closeConfirm() {
-        document.getElementById('confirmModal').classList.remove('active');
-        confirmAction = null;
-    }
-
-    function runConfirm() {
-        const action = confirmAction;
-        closeConfirm();
-        if (action) action();
-    }
-
-    let toastTimer = null;
-    function showToast(message, isError) {
-        const el = document.getElementById('toast');
-        el.textContent = message;
-        el.className = 'toast show' + (isError ? ' error' : '');
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(function () { el.className = 'toast'; }, 3500);
-    }
-
-    // ============================================================
-    // 유틸
-    // ============================================================
-    function getTodayDate() {
-        const d = new Date();
-        return d.getFullYear() + '-' +
-               String(d.getMonth() + 1).padStart(2, '0') + '-' +
-               String(d.getDate()).padStart(2, '0');
-    }
-
-    function updateDates() {
-        const d = new Date();
-        const days = ['(일)', '(월)', '(화)', '(수)', '(목)', '(금)', '(토)'];
-        const text = (d.getMonth() + 1) + '월 ' + d.getDate() + '일 ' + days[d.getDay()];
-        document.querySelectorAll('.js-date').forEach(function (el) { el.textContent = text; });
-    }
-
-    function escapeHtml(value) {
-        return String(value === null || value === undefined ? '' : value)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
-
-    function renderStudentPreview() {
-        const box = document.getElementById('studentListPreview');
-        if (studentList.length === 0) {
-            box.innerHTML = '<p class="empty">아직 명단이 없습니다.</p>';
-            return;
-        }
-
-        const rows = studentList.slice(0, 50).map(function (s) {
-            return '<tr>' +
-                '<td style="padding:6px; border:1px solid #ddd; text-align:center;">' + s.grade + '</td>' +
-                '<td style="padding:6px; border:1px solid #ddd; text-align:center;">' + s.class + '</td>' +
-                '<td style="padding:6px; border:1px solid #ddd; text-align:center;">' + s.number + '</td>' +
-                '<td style="padding:6px; border:1px solid #ddd;">' + escapeHtml(s.name) + '</td>' +
-            '</tr>';
-        }).join('');
-
-        const more = studentList.length > 50
-            ? '<tr><td colspan="4" style="padding:8px; text-align:center; color:#888;">외 ' +
-              (studentList.length - 50) + '명</td></tr>'
-            : '';
-
-        box.innerHTML =
-            '<table style="width:100%; border-collapse:collapse; font-size:12px;">' +
-                '<tr style="background:#f0f0f0; font-weight:600;">' +
-                    '<td style="padding:6px; border:1px solid #ddd; width:44px;">학년</td>' +
-                    '<td style="padding:6px; border:1px solid #ddd; width:44px;">반</td>' +
-                    '<td style="padding:6px; border:1px solid #ddd; width:44px;">번호</td>' +
-                    '<td style="padding:6px; border:1px solid #ddd;">이름</td>' +
-                '</tr>' + rows + more +
-            '</table>';
-    }
-    </script>
+    loadTasks();
+}
+
+// ============================================================
+// 모달 · 토스트
+// ============================================================
+function openModal(title, text, okLabel, action) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalText').textContent = text;
+    document.getElementById('modalOk').textContent = okLabel;
+    modalAction = action;
+    document.getElementById('modal').classList.add('on');
+}
+
+function closeModal() {
+    document.getElementById('modal').classList.remove('on');
+    modalAction = null;
+}
+
+function runModal() {
+    const action = modalAction;
+    closeModal();
+    if (action) action();
+}
+
+let toastTimer = null;
+function toast(text, bad) {
+    const el = document.getElementById('toast');
+    el.textContent = text;
+    el.className = 'toast on' + (bad ? ' bad' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.className = 'toast'; }, 3500);
+}
+
+// ============================================================
+// 유틸
+// ============================================================
+function today() {
+    const d = new Date();
+    return d.getFullYear() + '-' +
+           String(d.getMonth() + 1).padStart(2, '0') + '-' +
+           String(d.getDate()).padStart(2, '0');
+}
+
+function esc(v) {
+    return String(v ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderPreview() {
+    const box = document.getElementById('preview');
+    const rows = students.slice(0, 60).map(s =>
+        `<tr><td style="text-align:center">${s.grade}</td>
+             <td style="text-align:center">${s.class}</td>
+             <td style="text-align:center">${s.number}</td>
+             <td>${esc(s.name)}</td></tr>`).join('');
+
+    const more = students.length > 60
+        ? `<tr><td colspan="4" style="text-align:center; color:#888">외 ${students.length - 60}명</td></tr>`
+        : '';
+
+    box.innerHTML = `<table class="list">
+        <tr class="head"><td>학년</td><td>반</td><td>번호</td><td>이름</td></tr>
+        ${rows}${more}</table>`;
+}
+
+// ============================================================
+// 화면 전환 · 시작
+// ============================================================
+function switchPage(name, el) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(name).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    if (el) el.classList.add('active');
+    document.getElementById('sidebar').classList.remove('on');
+    window.scrollTo(0, 0);
+}
+
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('on');
+}
+
+window.addEventListener('load', () => {
+    const d = new Date();
+    const days = ['(일)','(월)','(화)','(수)','(목)','(금)','(토)'];
+    const text = (d.getMonth() + 1) + '월 ' + d.getDate() + '일 ' + days[d.getDay()];
+    document.querySelectorAll('.js-date').forEach(el => el.textContent = text);
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => switchPage(item.dataset.page, item));
+    });
+
+    loadStudents();
+});
+</script>
 </body>
 </html>
