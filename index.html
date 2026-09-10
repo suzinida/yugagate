@@ -120,6 +120,8 @@
         button:hover { background: #2563c4; }
         button.secondary { background: #f0f0f0; color: #333; }
         button.secondary:hover { background: #e0e0e0; }
+        button.success { background: #10b981; }
+        button.success:hover { background: #059669; }
 
         .page { display: none; }
         .page.active { display: block; }
@@ -160,13 +162,6 @@
         .task-item {
             padding: 12px;
             border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .task-info {
-            flex: 1;
         }
 
         .task-info .student { font-weight: 600; }
@@ -484,7 +479,7 @@
                 <div class="card" style="background: #f0f9ff; border-left: 4px solid #3b82f6;">
                     <h3>${g}학년 ${c}반 ${num}번 ${n}</h3>
                     <p style="color: #666; margin: 12px 0;">학생이 확인되었습니다.</p>
-                    <button onclick="openGoogleForm('${g}', '${c}', '${num}', '${n}')" style="width: 100%; background: #10b981; margin-top: 12px;">
+                    <button onclick="openGoogleForm()" style="width: 100%; background: #10b981; margin-top: 12px; font-size: 16px;">
                         📝 Google Forms에서 저장
                     </button>
                 </div>
@@ -495,10 +490,9 @@
         }
 
         // ========== Google Forms 열기 ==========
-        function openGoogleForm(grade, cls, number, name) {
-            const url = `${GOOGLE_FORMS_URL}?usp=pp_url&entry.XXXXXXX=${encodeURIComponent(`${grade}학년 ${cls}반 ${number}번 ${name}`)}`;
+        function openGoogleForm() {
+            console.log('📝 Google Forms 열기');
             window.open(GOOGLE_FORMS_URL, '_blank');
-            console.log(`✅ Google Forms 열기: ${name}`);
         }
 
         // ========== 과거 지도내역 로드 ==========
