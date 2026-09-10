@@ -123,6 +123,22 @@
         button.success { background: #10b981; }
         button.success:hover { background: #059669; }
 
+        .reason-btn {
+            border: 3px solid transparent !important;
+            padding: 8px 12px !important;
+            transition: all 0.2s !important;
+            font-weight: 600;
+            font-size: 13px !important;
+            width: 100%;
+        }
+
+        .reason-btn.selected {
+            border: 3px solid currentColor !important;
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.1), inset 0 0 8px currentColor !important;
+        }
+
+        .button-group { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 16px; }
+
         .page { display: none; }
         .page.active { display: block; }
 
@@ -162,10 +178,47 @@
         .task-item {
             padding: 12px;
             border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .task-info {
+            flex: 1;
         }
 
         .task-info .student { font-weight: 600; }
         .task-info .detail { font-size: 12px; color: #999; margin-top: 4px; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active { display: flex; }
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal button {
+            padding: 12px 16px !important;
+            font-size: 14px !important;
+        }
+
+        .modal .button-group {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 12px !important;
+        }
 
         @media (max-width: 768px) {
             .container { grid-template-columns: 1fr; }
@@ -182,6 +235,7 @@
             .sidebar.active { left: 0; }
             .main { padding: 12px; }
             .form-row { grid-template-columns: 1fr; gap: 6px; }
+            .button-group { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -260,8 +314,7 @@
                 <div class="card">
                     <h2 style="color: #3b82f6;">📡 학생명단 동기화</h2>
                     <p style="color: #666; margin-bottom: 16px; font-size: 13px;">
-                        Google Sheets에서 학생명단을 동기화합니다.<br>
-                        처음 사용 시 또는 학생명단 변경 후 눌러주세요.
+                        Google Sheets에서 학생명단을 동기화합니다.
                     </p>
                     <button type="button" onclick="loadStudentListFromSheets()" 
                         style="width: 100%; background: #3b82f6; color: white;">
@@ -276,18 +329,18 @@
                         <p style="color: #999; text-align: center; padding: 20px;">로드 버튼을 눌러주세요</p>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
 
-                <div class="card">
-                    <h2 style="color: #666;">ℹ️ 정보</h2>
-                    <p style="color: #666; font-size: 13px; line-height: 1.6;">
-                        <strong>App Version:</strong> 5.0 (Google Forms)<br>
-                        <strong>Data Storage:</strong> Google Sheets + Google Forms<br>
-                        <br>
-                        📌 학생명단: Google Sheets CSV 직접 읽기<br>
-                        💾 기록 저장: Google Forms 제출<br>
-                        📋 미완료 확인: Apps Script 호출
-                    </p>
-                </div>
+    <!-- 저장 확인 모달 -->
+    <div class="modal" id="confirmModal">
+        <div class="modal-content">
+            <h3>저장 확인</h3>
+            <p id="confirmMessage" style="margin-bottom: 16px; color: #666;"></p>
+            <div class="button-group">
+                <button class="secondary" onclick="closeConfirmModal()">취소</button>
+                <button onclick="confirmSave()">저장</button>
             </div>
         </div>
     </div>
@@ -297,10 +350,11 @@
         // ========== 설정 ==========
         const SHEET_ID = '1FzZaqtdiTHpULtzAJSC-sLEkRVcYJWrNc1JVEe0jDyA';
         const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`;
-        const GOOGLE_FORMS_URL = 'https://docs.google.com/forms/d/13xQ5LbfQAjk0UbuqM8zP7ggWD3zA4k6oQ0b9PifMFW0/edit';
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzpJp67153R8Cm_y8SfCAZtWJ-mvN5FHetBNYEpl687qwZGCoh7LlCOckPpehedCOBl/exec';
 
         let studentList = [];
+        let homeSelectedReason = '';
+        let homePendingData = null;
 
         // ========== 초기화 ==========
         window.addEventListener('load', () => {
@@ -308,7 +362,7 @@
             updateAllDates();
         });
 
-        // ========== Google Sheets에서 CSV로 학생명단 로드 ==========
+        // ========== Google Sheets CSV 로드 ==========
         async function loadStudentListFromSheets() {
             try {
                 console.log('📡 Google Sheets에서 CSV 로드 중...');
@@ -323,14 +377,11 @@
                 }
 
                 const csv = await response.text();
-                console.log('✅ CSV 다운로드 완료');
-
                 Papa.parse(csv, {
                     header: false,
                     skipEmptyLines: true,
                     complete: function(results) {
                         const data = results.data;
-
                         if (data.length < 2) {
                             throw new Error('학생명단이 비어있습니다');
                         }
@@ -344,11 +395,9 @@
                                 name: String(row[3]).trim()
                             }));
 
-                        console.log(`✅ 학생명단 파싱 완료: ${studentList.length}명`);
-
+                        console.log(`✅ 학생명단 로드 완료: ${studentList.length}명`);
                         statusEl.className = 'sync-status success';
-                        statusEl.innerHTML = `✅ ${studentList.length}명 로드 완료! (${new Date().toLocaleTimeString('ko-KR')})`;
-
+                        statusEl.innerHTML = `✅ ${studentList.length}명 로드 완료!`;
                         showStudentListPreview();
                     },
                     error: function(error) {
@@ -382,10 +431,7 @@
             const classSelect = document.getElementById('inputClass');
             classSelect.innerHTML = '<option value="">선택</option>';
 
-            let maxClass = 0;
-            if (grade === '1') maxClass = 11;
-            else if (grade === '2') maxClass = 12;
-            else if (grade === '3') maxClass = 11;
+            let maxClass = grade === '1' ? 11 : grade === '2' ? 12 : 11;
 
             for (let i = 1; i <= maxClass; i++) {
                 const opt = document.createElement('option');
@@ -397,7 +443,6 @@
             classSelect.addEventListener('change', updateStudentNameList);
         }
 
-        // ========== 학생명단 업데이트 (이름 자동완성) ==========
         function updateStudentNameList() {
             const grade = document.getElementById('inputGrade').value;
             const cls = document.getElementById('inputClass').value;
@@ -417,18 +462,14 @@
             }
         }
 
-        // ========== 학생 선택 ==========
         function selectStudent(fullName) {
             const grade = parseInt(document.getElementById('inputGrade').value);
             const cls = parseInt(document.getElementById('inputClass').value);
-            
             const students = getStudentsByClass(grade, cls);
             const selected = students.find(s => s.name === fullName);
             
             if (selected) {
                 document.getElementById('inputNumber').value = selected.number;
-            } else {
-                document.getElementById('inputNumber').value = '';
             }
         }
 
@@ -454,7 +495,7 @@
                     num = selected.number;
                     document.getElementById('inputNumber').value = num;
                 } else {
-                    alert('입력하신 이름이 학생명단에 없습니다.\n이름을 다시 확인해주세요.');
+                    alert('입력하신 이름이 학생명단에 없습니다.');
                     return;
                 }
             }
@@ -466,45 +507,190 @@
             if (!student) {
                 document.getElementById('queryResultContainer').innerHTML = `
                     <div class="card" style="background: #fee2e2; border-left: 4px solid #ef4444;">
-                        <h3 style="color: #991b1b;">⚠️ 조회 결과</h3>
-                        <p style="color: #c41c3b; font-weight: 600; padding: 16px 0;">
-                            조회된 학생이 없습니다
-                        </p>
+                        <p style="color: #c41c3b; font-weight: 600;">조회된 학생이 없습니다</p>
                     </div>
                 `;
                 return;
             }
 
+            // 과거 기록 로드
+            loadStudentHistory(g, c, n, num);
+            
+            // 지도 입력 카드 추가
             let html = `
                 <div class="card" style="background: #f0f9ff; border-left: 4px solid #3b82f6;">
                     <h3>${g}학년 ${c}반 ${num}번 ${n}</h3>
-                    <p style="color: #666; margin: 12px 0;">학생이 확인되었습니다.</p>
-                    <button onclick="openGoogleForm()" style="width: 100%; background: #10b981; margin-top: 12px; font-size: 16px;">
-                        📝 Google Forms에서 저장
-                    </button>
+                    
+                    <h4 style="margin-top: 24px;">지도 사유 선택</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                        <button class="reason-btn" onclick="setReason('지각')" id="btn-지각" style="background: #fef3c7; color: #92400e;">지각</button>
+                        <button class="reason-btn" onclick="setReason('복장')" id="btn-복장" style="background: #fce7f3; color: #831843;">복장</button>
+                        <button class="reason-btn" onclick="setReason('화장')" id="btn-화장" style="background: #f3e8ff; color: #581c87;">화장</button>
+                        <button class="reason-btn" onclick="setReason('기타')" id="btn-기타" style="background: #ccfbf1; color: #134e4a;">기타</button>
+                    </div>
+                    <input type="text" id="inputReasonOther" placeholder="기타 사유 입력" style="width: 100%; margin-bottom: 12px; display: none;">
+                    
+                    <h4>조치 선택</h4>
+                    <div class="button-group">
+                        <button onclick="prepareRecord('${g}', '${c}', '${n}', '${num}', 'work')" style="background: #e0e7ff; color: #4338ca;">📝 빡지</button>
+                        <button onclick="prepareRecord('${g}', '${c}', '${n}', '${num}', 'clean')" style="background: #cffafe; color: #0c4a6e;">✨ 청소</button>
+                        <button onclick="prepareRecord('${g}', '${c}', '${n}', '${num}', 'inspection')" style="background: #dbeafe; color: #0c2d6b;">🔍 검사</button>
+                    </div>
+                    
+                    <div style="margin-top: 12px;">
+                        <button class="secondary" onclick="prepareRecord('${g}', '${c}', '${n}', '${num}', 'record')" style="width: 100%;">💾 기록만 저장</button>
+                    </div>
                 </div>
             `;
 
-            loadStudentHistory(g, c, n);
             document.getElementById('queryResultContainer').innerHTML = html;
         }
 
-        // ========== Google Forms 열기 ==========
-        function openGoogleForm() {
-            console.log('📝 Google Forms 열기');
-            window.open(GOOGLE_FORMS_URL, '_blank');
+        // ========== 사유 선택 ==========
+        function setReason(reason) {
+            homeSelectedReason = reason;
+            document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('selected'));
+            document.getElementById('btn-' + reason).classList.add('selected');
+            
+            const otherInput = document.getElementById('inputReasonOther');
+            if (reason === '기타') {
+                otherInput.style.display = 'block';
+                otherInput.focus();
+            } else {
+                otherInput.style.display = 'none';
+            }
         }
 
-        // ========== 과거 지도내역 로드 ==========
-        async function loadStudentHistory(grade, cls, name) {
+        // ========== 기록 저장 준비 ==========
+        function prepareRecord(g, c, n, num, type) {
+            if (!homeSelectedReason) {
+                alert('지도 사유를 선택해주세요!');
+                return;
+            }
+            
+            const reason = homeSelectedReason === '기타' 
+                ? document.getElementById('inputReasonOther').value 
+                : homeSelectedReason;
+            
+            if (!reason) {
+                alert('모든 항목을 입력해주세요!');
+                return;
+            }
+
+            const recordData = {
+                date: getTodayDate(),
+                grade: parseInt(g),
+                class: parseInt(c),
+                number: parseInt(num),
+                name: n,
+                reason: reason
+            };
+            
+            if (type === 'work') {
+                recordData.assignedWork = 'Y';
+                recordData.completedWork = 'N';
+                recordData.assignedClean = '-';
+                recordData.completedClean = '-';
+                recordData.assignedInspection = '-';
+                recordData.completedInspection = '-';
+            } else if (type === 'clean') {
+                recordData.assignedWork = '-';
+                recordData.completedWork = '-';
+                recordData.assignedClean = 'Y';
+                recordData.completedClean = 'N';
+                recordData.assignedInspection = '-';
+                recordData.completedInspection = '-';
+            } else if (type === 'inspection') {
+                recordData.assignedWork = '-';
+                recordData.completedWork = '-';
+                recordData.assignedClean = '-';
+                recordData.completedClean = '-';
+                recordData.assignedInspection = 'Y';
+                recordData.completedInspection = 'N';
+            } else {
+                recordData.assignedWork = '-';
+                recordData.completedWork = '-';
+                recordData.assignedClean = '-';
+                recordData.completedClean = '-';
+                recordData.assignedInspection = '-';
+                recordData.completedInspection = '-';
+            }
+
+            let msg = `${n} 학생\n사유: ${reason}\n\n`;
+            if (type === 'work') {
+                msg += '빡지를 지정하시겠습니까?';
+            } else if (type === 'clean') {
+                msg += '청소를 지정하시겠습니까?';
+            } else if (type === 'inspection') {
+                msg += '검사를 지정하시겠습니까?';
+            } else {
+                msg += '기록을 저장하시겠습니까?';
+            }
+            
+            homePendingData = recordData;
+            showConfirmModal(msg);
+        }
+
+        // ========== 모달 ==========
+        function showConfirmModal(msg) {
+            document.getElementById('confirmMessage').textContent = msg;
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.remove('active');
+            homePendingData = null;
+        }
+
+        function confirmSave() {
+            if (homePendingData) {
+                saveToSheets(homePendingData);
+            }
+            closeConfirmModal();
+        }
+
+        // ========== Apps Script에 저장 ==========
+        async function saveToSheets(recordData) {
+            try {
+                console.log('📤 저장 중:', recordData);
+                
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(recordData)
+                });
+                
+                const result = await response.json();
+                console.log('📤 응답:', result);
+                
+                if (!result.success) {
+                    throw new Error(result.error || '저장 실패');
+                }
+                
+                console.log(`✅ 저장 완료`);
+                alert('✅ 저장되었습니다!');
+                
+                // 입력 초기화
+                document.getElementById('inputGrade').value = '';
+                document.getElementById('inputClass').value = '';
+                document.getElementById('inputClass').innerHTML = '<option value="">선택</option>';
+                document.getElementById('inputNumber').value = '';
+                document.getElementById('inputName').value = '';
+                document.getElementById('queryResultContainer').innerHTML = '';
+                homeSelectedReason = '';
+                
+            } catch (error) {
+                console.error('❌ 저장 실패:', error);
+                alert('❌ 저장 실패: ' + error.message);
+            }
+        }
+
+        // ========== 과거 기록 로드 ==========
+        async function loadStudentHistory(grade, cls, name, num) {
             try {
                 const url = `${APPS_SCRIPT_URL}?action=getRecords&grade=${grade}&class=${cls}&name=${encodeURIComponent(name)}`;
-                console.log('📡 과거 기록 조회 중:', url);
-                
                 const response = await fetch(url);
                 const result = await response.json();
-                
-                console.log('✅ 과거 기록 조회 완료:', result);
                 
                 if (result.success && result.data.length > 0) {
                     displayHistory(result.data);
@@ -522,13 +708,13 @@
             
             records.forEach(record => {
                 let status = '';
-                if (record.completedWork === 'Y') status += ' ✅ 빡지완료';
-                if (record.completedClean === 'Y') status += ' ✅ 청소완료';
-                if (record.completedInspection === 'Y') status += ' ✅ 검사완료';
+                if (record.completedWork === 'Y') status += ' ✅빡지완료';
+                if (record.completedClean === 'Y') status += ' ✅청소완료';
+                if (record.completedInspection === 'Y') status += ' ✅검사완료';
                 
-                if (record.completedWork === 'N' && record.assignedWork === 'Y') status += ' ⏳ 빡지미완';
-                if (record.completedClean === 'N' && record.assignedClean === 'Y') status += ' ⏳ 청소미완';
-                if (record.completedInspection === 'N' && record.assignedInspection === 'Y') status += ' ⏳ 검사미완';
+                if (record.completedWork === 'N' && record.assignedWork === 'Y') status += ' ⏳빡지미완';
+                if (record.completedClean === 'N' && record.assignedClean === 'Y') status += ' ⏳청소미완';
+                if (record.completedInspection === 'N' && record.assignedInspection === 'Y') status += ' ⏳검사미완';
                 
                 html += `
                     <div class="history-item">
@@ -540,7 +726,7 @@
             });
             
             html += '</div>';
-            document.getElementById('queryResultContainer').innerHTML += html;
+            document.getElementById('queryResultContainer').innerHTML = html + document.getElementById('queryResultContainer').innerHTML;
         }
 
         // ========== 미완료 과제 로드 ==========
@@ -576,9 +762,10 @@
                         ${workTasks.map(t => `
                             <div class="task-item">
                                 <div class="task-info">
-                                    <div class="student">${t.grade}학년 ${t.class}반 ${t.number}번 ${t.name}</div>
-                                    <div class="detail">${t.date} - ${t.reason}</div>
+                                    <div class="student">${t.grade}학년 ${t.class}반 ${t.number}번 ${t.name} (${t.reason})</div>
+                                    <div class="detail">${t.date}</div>
                                 </div>
+                                <button class="success" onclick="markCompleted(${t.grade}, ${t.class}, ${t.number}, '${t.name}', 'work')" style="width: auto;">✅ 완료</button>
                             </div>
                         `).join('')}
                     </div>
@@ -593,9 +780,10 @@
                         ${cleanTasks.map(t => `
                             <div class="task-item">
                                 <div class="task-info">
-                                    <div class="student">${t.grade}학년 ${t.class}반 ${t.number}번 ${t.name}</div>
-                                    <div class="detail">${t.date} - ${t.reason}</div>
+                                    <div class="student">${t.grade}학년 ${t.class}반 ${t.number}번 ${t.name} (${t.reason})</div>
+                                    <div class="detail">${t.date}</div>
                                 </div>
+                                <button class="success" onclick="markCompleted(${t.grade}, ${t.class}, ${t.number}, '${t.name}', 'clean')" style="width: auto;">✅ 완료</button>
                             </div>
                         `).join('')}
                     </div>
@@ -610,9 +798,10 @@
                         ${inspectionTasks.map(t => `
                             <div class="task-item">
                                 <div class="task-info">
-                                    <div class="student">${t.grade}학년 ${t.class}반 ${t.number}번 ${t.name}</div>
-                                    <div class="detail">${t.date} - ${t.reason}</div>
+                                    <div class="student">${t.grade}학년 ${t.class}반 ${t.number}번 ${t.name} (${t.reason})</div>
+                                    <div class="detail">${t.date}</div>
                                 </div>
+                                <button class="success" onclick="markCompleted(${t.grade}, ${t.class}, ${t.number}, '${t.name}', 'inspection')" style="width: auto;">✅ 완료</button>
                             </div>
                         `).join('')}
                     </div>
@@ -624,6 +813,38 @@
             }
             
             document.getElementById('uncompletedContainer').innerHTML = html;
+        }
+
+        // ========== 완료 표시 ==========
+        async function markCompleted(grade, cls, number, name, type) {
+            try {
+                const updateData = {
+                    grade: grade,
+                    class: cls,
+                    number: number,
+                    name: name,
+                    type: type
+                };
+                
+                console.log('📤 완료 표시:', updateData);
+                
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log('✅ 완료 표시 완료');
+                    alert('✅ 완료 표시되었습니다!');
+                    loadUncompletedTasks(); // 다시 로드
+                }
+            } catch (error) {
+                console.error('❌ 실패:', error);
+                alert('❌ 실패: ' + error.message);
+            }
         }
 
         // ========== 페이지 전환 ==========
@@ -640,6 +861,10 @@
         }
 
         // ========== 날짜 ==========
+        function getTodayDate() {
+            return new Date().toISOString().split('T')[0];
+        }
+
         function updateAllDates() {
             const d = new Date();
             const days = ['(일)', '(월)', '(화)', '(수)', '(목)', '(금)', '(토)'];
