@@ -254,7 +254,7 @@
 // ============================================================
 // 설정 — 웹앱 주소가 바뀌면 이 줄만 고치면 됩니다.
 // ============================================================
-const API = 'https://script.google.com/macros/s/AKfycbyOFcfFoQBBdpXndrqPxZvKzNr8ylpV13qguhM-LPpoI6P9m6SGYRqD5p3UkJ7cPS1z/exec';
+const API = 'https://script.google.com/macros/s/AKfycbzpJp67153R8Cm_y8SfCAZtWJ-mvN5FHetBNYEpl687qwZGCoh7LlCOckPpehedCOBl/exec';
 
 const REASONS = [
     { key: '지각', bg: '#fef3c7', fg: '#92400e' },
@@ -279,6 +279,7 @@ let reasons  = new Set();
 let tasks    = new Set();
 let taskList = [];
 let modalAction = null;
+let serverOK = false;    // 배포된 스크립트가 2.0 인지 확인되기 전에는 저장을 막습니다.
 
 // ============================================================
 // 서버 통신
@@ -308,7 +309,21 @@ async function call(payload) {
     }
 
     if (!json.success) throw new Error(json.message || '요청을 처리하지 못했습니다.');
+
+    // 예전 스크립트는 어떤 요청이든 "저장"으로 처리하고 목록 대신 엉뚱한 응답을 돌려줍니다.
+    // 그 상태를 조용히 넘기지 않고 여기서 잡아냅니다.
+    if (json.version !== '2.0') {
+        throw new Error('예전 스크립트가 배포돼 있습니다. 배포 관리에서 버전을 "새 버전"으로 다시 배포하세요.');
+    }
     return json;
+}
+
+// 목록을 기대하는 요청인데 배열이 아니면 잘못된 응답입니다.
+function asList(data) {
+    if (!Array.isArray(data)) {
+        throw new Error('서버가 목록 대신 다른 응답을 보냈습니다. 배포된 스크립트 버전을 확인하세요.');
+    }
+    return data;
 }
 
 async function ping() {
@@ -341,7 +356,8 @@ async function loadStudents() {
     show('listStatus', '', '학생명단을 불러오는 중…');
     try {
         const r = await call({ action: 'getStudents' });
-        students = r.data || [];
+        students = asList(r.data);
+        serverOK = true;
 
         if (students.length === 0) {
             show('listStatus', 'bad', '학생명단이 비어 있습니다. 명단 시트를 확인해 주세요.');
@@ -352,6 +368,7 @@ async function loadStudents() {
         fillGrades();
         renderPreview();
     } catch (e) {
+        serverOK = false;
         show('listStatus', 'bad', e.message);
     }
 }
@@ -467,6 +484,7 @@ function pickTask(key) {
 // ============================================================
 function askSave() {
     if (!student) return;
+    if (!serverOK) return toast('서버 연결이 확인되지 않아 저장할 수 없습니다. 설정에서 연결 확인을 눌러보세요.', true);
     if (reasons.size === 0) return toast('지도 사유를 고르세요.', true);
 
     // 고른 순서가 아니라 늘 같은 순서로 정리해서 저장합니다.
@@ -529,7 +547,7 @@ async function loadHistory() {
             number: student.number,
             name: student.name
         });
-        renderHistory(r.data || []);
+        renderHistory(asList(r.data));
     } catch (e) {
         box.innerHTML = `<div class="card"><p class="empty" style="color:#991b1b;">${esc(e.message)}</p></div>`;
     }
@@ -580,7 +598,7 @@ async function loadTasks() {
 
     try {
         const r = await call({ action: 'getUncompletedTasks' });
-        taskList = r.data || [];
+        taskList = asList(r.data);
         renderTasks();
     } catch (e) {
         box.innerHTML = `<div class="card"><p class="empty" style="color:#991b1b;">${esc(e.message)}</p></div>`;
