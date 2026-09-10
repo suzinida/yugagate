@@ -382,7 +382,7 @@
 
     <script>
         // ========== 설정 ==========
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/d/[배포ID]/userweb';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/d/AKfycbyLAivA_3-nJ-GeqxP22ZRClo7b7AHjDSQVd_KOF-xrdQ9VjeXdtkz1Xu1o3g8Ij4q4/userweb';
 
         let studentList = [];
         let homeSelectedReason = '';
@@ -438,6 +438,18 @@
             }
         }
 
+        // ========== 학생 필터링 ==========
+        function getStudentsByClass(grade, cls) {
+            return studentList
+                .filter(s => s.grade == grade && s.class == cls)
+                .sort((a, b) => a.number - b.number);
+        }
+
+        function getStudentNamesByClass(grade, cls) {
+            return getStudentsByClass(grade, cls)
+                .map(s => s.name);
+        }
+
         // ========== 학반 드롭다운 업데이트 ==========
         function updateClassDropdown() {
             const grade = document.getElementById('inputGrade').value;
@@ -471,10 +483,10 @@
             document.getElementById('inputNumber').value = '';
             
             if (grade && cls) {
-                const students = getStudentsByClass(grade, cls);
-                students.forEach(student => {
+                const names = getStudentNamesByClass(grade, cls);
+                names.forEach(name => {
                     const option = document.createElement('option');
-                    option.value = student.name;
+                    option.value = name;
                     datalist.appendChild(option);
                 });
             }
