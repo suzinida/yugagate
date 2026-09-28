@@ -166,6 +166,28 @@
         background: #e2e8f0; color: #475569;
     }
 
+    /* 오래 밀린 과제 */
+    .tag.late {
+        background: #dc2626; color: #fff;
+    }
+
+    .card.late {
+        border: 2px solid #dc2626;
+        border-left-width: 6px;
+        background: #fef2f2;
+    }
+    .card.late h3 { color: #b91c1c; }
+    .card.late .task { border-bottom-color: #fecaca; }
+    .card.late .who { color: #991b1b; }
+
+    .late-note {
+        font-size: 13px; color: #b91c1c; margin-bottom: 12px;
+    }
+
+    .days {
+        color: #dc2626; font-weight: 600;
+    }
+
     .modal {
         display: none; position: fixed; inset: 0;
         background: rgba(0,0,0,.5); z-index: 100;
@@ -376,6 +398,9 @@ const TASKS = [
     { key: 'inspection', name: '검사', icon: '🔍', bg: '#dbeafe', fg: '#0c2d6b' }
 ];
 const TASK_NAME = { work: '빡지', clean: '청소', inspection: '검사' };
+
+// 며칠 넘게 안 끝나면 따로 모아서 빨갛게 보여줄지
+const OVERDUE_DAYS = 3;
 
 // 브라우저에 저장해 두는 자리 (다음에 열 때 곧바로 쓰려고)
 const LS = {
@@ -1136,6 +1161,23 @@ function effectiveTasks() {
     return base.concat(extra);
 }
 
+// 지정한 날로부터 며칠이 지났는지 셉니다. (오늘 지정 = 0일)
+function daysSince(dateText) {
+    const m = String(dateText || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return 0;
+
+    const then = new Date(+m[1], +m[2] - 1, +m[3]);
+    const now  = new Date();
+    const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const diff = Math.floor((base - then) / 86400000);
+    return diff > 0 ? diff : 0;
+}
+
+function isLate(t) {
+    return !t.queued && daysSince(t.date) >= OVERDUE_DAYS;
+}
+
 function renderTasks() {
     const box = document.getElementById('tasks');
     if (!box) return;
@@ -1148,10 +1190,24 @@ function renderTasks() {
         return;
     }
 
+    const late = list.filter(isLate)
+                     .sort(function (a, b) { return daysSince(b.date) - daysSince(a.date); });
+    const rest = list.filter(function (t) { return !isLate(t); });
+
     let html = '';
 
+    // 오래 밀린 과제를 맨 위에 따로 모읍니다.
+    if (late.length > 0) {
+        const worst = daysSince(late[0].date);
+        html += '<div class="card late">' +
+                    '<h3>⚠️ ' + OVERDUE_DAYS + '일 넘게 밀린 과제 ' + late.length + '건</h3>' +
+                    '<p class="late-note">가장 오래된 건은 ' + worst + '일 지났습니다. 먼저 처리해 주세요.</p>' +
+                    late.map(function (s) { return taskRow(s, true); }).join('') +
+                '</div>';
+    }
+
     TASKS.forEach(function (t) {
-        const items = list.filter(function (x) { return x.type === t.key; });
+        const items = rest.filter(function (x) { return x.type === t.key; });
         if (items.length === 0) return;
 
         html += '<div class="card" style="border-left:4px solid ' + t.fg + ';">' +
@@ -1163,16 +1219,20 @@ function renderTasks() {
     box.innerHTML = html;
 }
 
-function taskRow(s) {
+function taskRow(s, showType) {
     const btn = s.queued
         ? '<span class="tag">업로드 대기</span>'
         : '<button class="success" onclick="askComplete(' + s.row + ',\'' + s.type + '\')">완료 처리</button>';
 
+    const days = daysSince(s.date);
+    const badge = isLate(s) ? '<span class="tag late">' + days + '일 경과</span>' : '';
+    const kind  = showType ? TASK_NAME[s.type] + ' · ' : '';
+
     return '<div class="task">' +
                '<div>' +
                    '<div class="who">' + s.grade + '학년 ' + s.class + '반 ' +
-                        s.number + '번 ' + esc(s.name) + '</div>' +
-                   '<div class="when">' + esc(s.date) + ' · ' + esc(s.reason) + '</div>' +
+                        s.number + '번 ' + esc(s.name) + badge + '</div>' +
+                   '<div class="when">' + kind + esc(s.date) + ' · ' + esc(s.reason) + '</div>' +
                '</div>' + btn +
            '</div>';
 }
@@ -1299,25 +1359,37 @@ function bcStudentView(list) {
         groups[key].items.push(t);
     });
 
+    // 오래 밀린 학생을 위로 올립니다.
     const cards = Object.keys(groups)
-        .sort(function (a, b) { return a - b; })
+        .sort(function (a, b) {
+            const la = Math.max.apply(null, groups[a].items.map(function (t) { return isLate(t) ? daysSince(t.date) : 0; }));
+            const lb = Math.max.apply(null, groups[b].items.map(function (t) { return isLate(t) ? daysSince(t.date) : 0; }));
+            if (la !== lb) return lb - la;
+            return a - b;
+        })
         .map(function (k) {
             const s = groups[k];
+            const anyLate = s.items.some(isLate);
+
             const lines = s.items.map(function (t) {
                 const right = t.queued
                     ? '<span class="tag">업로드 대기</span>'
                     : '<button class="success" onclick="askComplete(' + t.row + ',\'' + t.type + '\')">완료</button>';
+                const days = isLate(t)
+                    ? ' <span class="days">' + daysSince(t.date) + '일 경과</span>'
+                    : '';
                 return '<div class="line">' +
                            '<div>' + TASK_NAME[t.type] + ' · ' + esc(t.reason) +
-                               ' <span style="color:#888;">(' + esc(t.date) + ')</span></div>' +
+                               ' <span style="color:#888;">(' + esc(t.date) + ')</span>' + days + '</div>' +
                            right +
                        '</div>';
             }).join('');
 
-            return '<div class="stu">' +
+            return '<div class="stu"' + (anyLate ? ' style="border-color:#dc2626; background:#fef2f2;"' : '') + '>' +
                        '<div class="name">' + s.number + '번 ' + esc(s.name) +
                            ' <span style="font-weight:400; color:#888; font-size:13px;">' +
-                           s.items.length + '건</span></div>' +
+                           s.items.length + '건</span>' +
+                           (anyLate ? '<span class="tag late">밀림</span>' : '') + '</div>' +
                        lines +
                    '</div>';
         }).join('');
