@@ -358,8 +358,9 @@
                 <div id="queueStatus" class="status" style="margin-bottom:12px;">대기 중인 기록이 없습니다.</div>
                 <div class="grid-2">
                     <button onclick="flushQueue(false)">지금 업로드</button>
-                    <button class="danger" onclick="askClearQueue()">대기 목록 비우기</button>
+                    <button class="secondary" onclick="saveQueueFile()">파일로 내려받기</button>
                 </div>
+                <button class="danger wide" style="margin-top:8px;" onclick="askClearQueue()">대기 목록 비우기</button>
                 <div id="queueList" style="margin-top:14px;"></div>
             </div>
 
@@ -429,7 +430,7 @@
 const API = 'https://script.google.com/macros/s/AKfycbwAdxMYN5S9s9LxkyxpLfNHEf3hYyq667RuURtXLKliCV73C70s4tKeLW0u3oS3cvqM/exec';
 
 // 3.0 이 권장이지만 2.0 서버에서도 동작합니다(일괄 업로드만 느려짐).
-const OK_VERSIONS = ['2.0', '3.0'];
+const OK_VERSIONS = ['2.0', '3.0', '3.1'];
 
 const REASONS = [
     { key: '지각', bg: '#fef3c7', fg: '#92400e' },
@@ -472,6 +473,7 @@ let modalAction = null;
 let serverVersion = '';
 let serverOK = false;
 let flushing = false;
+let flushStartedAt = 0;
 let bcGrade = null, bcClass = null;   // 반별 조회 위치
 
 // ============================================================
@@ -494,17 +496,29 @@ function lsSet(key, value) {
 // application/json 으로 보내면 브라우저가 사전 요청(OPTIONS)을 보내는데
 // Apps Script 웹앱은 이를 처리하지 못해 요청이 실패합니다.
 // ============================================================
-async function call(payload) {
+async function call(payload, timeoutMs) {
     let res;
+
+    // 응답이 영영 오지 않는 경우가 있습니다. 정해진 시간이 지나면 끊습니다.
+    // 이 장치가 없으면 업로드가 "진행 중" 상태로 멈춰버립니다.
+    const limit = timeoutMs || 20000;
+    const stop  = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const timer = setTimeout(function () { if (stop) stop.abort(); }, limit);
+
     try {
         res = await fetch(API, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload),
-            redirect: 'follow'
+            redirect: 'follow',
+            signal: stop ? stop.signal : undefined
         });
     } catch (e) {
-        throw again('서버에 연결하지 못했습니다. 인터넷 연결을 확인하세요.');
+        throw again(e && e.name === 'AbortError'
+            ? '서버가 ' + Math.round(limit / 1000) + '초 안에 응답하지 않았습니다. 잠시 뒤 다시 시도합니다.'
+            : '서버에 연결하지 못했습니다. 인터넷 연결을 확인하세요.');
+    } finally {
+        clearTimeout(timer);
     }
 
     const text = await res.text();
@@ -538,7 +552,8 @@ function again(message) {
     return err;
 }
 
-function canBatch() { return serverVersion === '3.0'; }
+// 묶음 전송을 지원하는 서버인지 (3.0 부터)
+function canBatch() { return serverVersion === '3.0' || serverVersion === '3.1'; }
 
 function asList(data) {
     if (!Array.isArray(data)) {
@@ -582,6 +597,13 @@ window.addEventListener('load', function () {
     // 1) 저장해 둔 자료로 화면을 즉시 채웁니다.
     queue    = lsGet(LS.queue, []);
     rejected = lsGet(LS.rejected, []);
+
+    // 예전 방식으로 쌓인 항목에도 표식을 붙여 둡니다.
+    let patched = false;
+    queue.forEach(function (q) {
+        if (!q.uid) { q.uid = newUid(); patched = true; }
+    });
+    if (patched) lsSet(LS.queue, queue);
     history  = lsGet(LS.history, {});
     const cached = lsGet(LS.students, null);
 
@@ -897,9 +919,14 @@ async function doSave(payload) {
 // ============================================================
 // 업로드 대기열
 // ============================================================
+function newUid() {
+    return 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
 function enqueue(op, payload) {
     const item = {
         id: 'q' + Date.now() + Math.random().toString(16).slice(2, 6),
+        uid: newUid(),          // 같은 건이 두 번 저장되는 것을 막는 표식
         op: op,
         payload: payload,
         at: today(),
@@ -912,27 +939,52 @@ function enqueue(op, payload) {
     return item;
 }
 
+// 한 번에 보내는 건수. 적게 나눠 보내야 한 묶음이 실패해도 나머지는 올라갑니다.
+const CHUNK = 5;
+
+// 업로드가 멈춘 채로 이 시간이 지나면 멈춘 것으로 보고 다시 시작할 수 있게 합니다.
+const STUCK_MS = 90000;
+
+function flushStuck() {
+    return flushing && flushStartedAt && (Date.now() - flushStartedAt > STUCK_MS);
+}
+
 async function flushQueue(silent) {
-    if (flushing || queue.length === 0) return true;
+    if (queue.length === 0) return true;
+
+    // 이미 돌고 있으면 건너뜁니다. 단, 오래 멈춰 있었다면 다시 시작합니다.
+    if (flushing && !flushStuck()) return false;
 
     flushing = true;
+    flushStartedAt = Date.now();
     renderQueue();
+
     let refused = 0;
+    let sent    = 0;
+    let stopMsg = '';
 
     try {
-        if (canBatch()) {
-            // 3.0 서버 — 한 번에 보냅니다.
-            const items = queue.map(function (q) {
-                return Object.assign({ op: q.op }, q.payload);
-            });
-            const r = await call({ action: 'batch', items: items });
-            const results = (r.data && r.data.results) || [];
+        // 대기열을 CHUNK 개씩 끊어서 올립니다.
+        // 한 묶음이 끝날 때마다 저장하므로, 중간에 끊겨도 올라간 만큼은 사라집니다.
+        while (queue.length > 0) {
+            const batch = queue.slice(0, CHUNK);
+            let done;
+
+            try {
+                done = await sendChunk(batch);
+            } catch (e) {
+                // 연결·시간초과 — 남은 건 그대로 두고 멈춥니다.
+                batch.forEach(function (q) { q.tries++; q.error = e.message; });
+                lsSet(LS.queue, queue);
+                stopMsg = e.message;
+                break;
+            }
 
             const keep = [];
-            queue.forEach(function (q, i) {
-                const res = results[i];
-                if (res && res.ok) return;                         // 성공 → 제거
-                if (res && res.ok === false) {                     // 서버가 거절 → 보류함으로
+            batch.forEach(function (q, i) {
+                const res = done[i];
+                if (res && res.ok) { sent++; return; }              // 성공 → 제거
+                if (res && res.ok === false) {                      // 서버가 거절 → 보류함으로
                     reject(q, res.message);
                     refused++;
                     return;
@@ -941,47 +993,70 @@ async function flushQueue(silent) {
                 q.error = '응답을 받지 못했습니다';
                 keep.push(q);
             });
-            queue = keep;
 
-        } else {
-            // 2.0 서버 — 하나씩 보냅니다.
-            const keep = [];
-            for (const q of queue) {
-                try {
-                    await call(Object.assign({ action: q.op }, q.payload));
-                } catch (e) {
-                    if (e.permanent) { reject(q, e.message); refused++; }
-                    else { q.tries++; q.error = e.message; keep.push(q); }
-                }
+            // 처리한 묶음을 대기열에서 걷어냅니다.
+            queue = keep.concat(queue.slice(batch.length));
+            lsSet(LS.queue, queue);
+            renderQueue();
+
+            // 끝내 올라가지 않는 건만 남았다면 무한히 돌지 않도록 멈춥니다.
+            if (keep.length === batch.length) {
+                stopMsg = keep[0].error || '올리지 못했습니다';
+                break;
             }
-            queue = keep;
         }
-
-        lsSet(LS.queue, queue);
 
         if (refused > 0) {
             renderTasks();
             renderByClass();
             renderHistory();
-            toast(refused + '건은 서버가 받지 않았습니다. 설정에서 확인하세요.', true);
-        } else if (queue.length === 0) {
-            refreshTasks(true);            // 행 번호를 서버 기준으로 다시 맞춥니다
-            if (!silent) toast('대기 중이던 기록을 모두 올렸습니다.');
-        } else if (!silent) {
-            toast(queue.length + '건이 아직 남았습니다. ' + (queue[0].error || ''), true);
         }
 
-    } catch (e) {
-        // 연결이나 배포 문제 — 전부 그대로 두고 나중에 다시 시도합니다.
-        queue.forEach(function (q) { q.tries++; q.error = e.message; });
-        lsSet(LS.queue, queue);
-        if (!silent) toast(e.message, true);
+        if (queue.length === 0) {
+            refreshTasks(true);            // 행 번호를 서버 기준으로 다시 맞춥니다
+            if (!silent) {
+                toast(refused > 0
+                    ? sent + '건을 올렸습니다. ' + refused + '건은 서버가 받지 않아 설정에 모아뒀습니다.'
+                    : '대기 중이던 기록을 모두 올렸습니다.');
+            }
+        } else if (!silent) {
+            toast(sent > 0
+                ? sent + '건을 올렸습니다. ' + queue.length + '건 남음 — ' + stopMsg
+                : stopMsg || (queue.length + '건이 아직 남았습니다.'), true);
+        }
+
     } finally {
         flushing = false;
+        flushStartedAt = 0;
         renderQueue();
     }
 
     return queue.length === 0;
+}
+
+// 한 묶음을 보냅니다. 결과 배열을 batch 와 같은 순서로 돌려줍니다.
+async function sendChunk(batch) {
+    if (canBatch()) {
+        const items = batch.map(function (q) {
+            return Object.assign({ op: q.op, uid: q.uid, dedup: q.tries > 0 }, q.payload);
+        });
+        // 건수에 비례해 넉넉히 기다립니다.
+        const r = await call({ action: 'batch', items: items }, 20000 + batch.length * 6000);
+        return (r.data && r.data.results) || [];
+    }
+
+    // 예전 서버 — 하나씩 보냅니다.
+    const out = [];
+    for (const q of batch) {
+        try {
+            await call(Object.assign({ action: q.op, uid: q.uid }, q.payload));
+            out.push({ ok: true });
+        } catch (e) {
+            if (e.permanent) out.push({ ok: false, message: e.message });
+            else throw e;              // 연결 문제는 위로 올려 멈춥니다
+        }
+    }
+    return out;
 }
 
 // 서버가 내용을 보고 거절한 항목 — 대기열에서 빼서 따로 모아둡니다.
@@ -997,7 +1072,7 @@ function renderQueue() {
     const bar = document.getElementById('queueBar');
     bar.className = 'queuebar' + (queue.length ? ' on' : '');
     bar.textContent = flushing
-        ? '업로드 중…'
+        ? (flushStuck() ? '응답이 없습니다 — 눌러서 다시 시도' : '업로드 중… (' + queue.length + '건 남음)')
         : '업로드 대기 ' + queue.length + '건 — 눌러서 올리기';
 
     const statusEl = document.getElementById('queueStatus');
@@ -1055,6 +1130,59 @@ function clearRejected() {
     lsSet(LS.rejected, rejected);
     renderRejected();
     toast('목록을 지웠습니다.');
+}
+
+// 대기 중인 기록을 파일로 저장해 둡니다. 업로드가 끝내 안 될 때를 대비한 보험입니다.
+function saveQueueFile() {
+    if (queue.length === 0 && rejected.length === 0) {
+        return toast('저장할 대기 기록이 없습니다.');
+    }
+
+    const line = function (q) {
+        const p = q.payload;
+        const what = q.op === 'save'
+            ? '지도 · ' + (p.reason || '') +
+              ((p.tasks && p.tasks.length)
+                  ? ' · ' + p.tasks.map(function (k) { return TASK_NAME[k]; }).join(', ') + ' 지정'
+                  : ' · 조치 없음')
+            : '완료 · ' + TASK_NAME[p.type];
+        return (p.date || q.at) + '  ' + p.grade + '학년 ' + p.class + '반 ' +
+               p.number + '번 ' + p.name + '  |  ' + what;
+    };
+
+    let text = '생활지도 — 올라가지 않은 기록\n';
+    text += '내려받은 날: ' + today() + '\n';
+    text += '='.repeat(60) + '\n\n';
+
+    if (queue.length) {
+        text += '[업로드 대기 ' + queue.length + '건]\n';
+        text += queue.map(line).join('\n') + '\n\n';
+    }
+    if (rejected.length) {
+        text += '[서버가 받지 않은 ' + rejected.length + '건]\n';
+        text += rejected.map(function (q) {
+            return line(q) + '  (' + (q.error || '') + ')';
+        }).join('\n') + '\n\n';
+    }
+
+    text += '='.repeat(60) + '\n';
+    text += '아래는 복구용 원본입니다. 지우지 마세요.\n\n';
+    text += JSON.stringify({ queue: queue, rejected: rejected });
+
+    try {
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url;
+        a.download = '생활지도_대기기록_' + today() + '.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        toast('파일로 저장했습니다.');
+    } catch (e) {
+        toast('파일 저장이 막혀 있습니다. 아래 목록을 그대로 옮겨 적어 주세요.', true);
+    }
 }
 
 function askClearQueue() {
