@@ -340,7 +340,12 @@
             <h1>반별 조회</h1>
 
             <div class="card">
-                <p class="note">학년 → 반 순서로 들어가면 그 반에서 확인해야 할 학생이 나옵니다.</p>
+                <div class="form-group" style="margin-bottom:10px;">
+                    <label for="bcSearch">학생 찾기 — 반을 몰라도 이름만 치면 됩니다</label>
+                    <input type="text" id="bcSearch" placeholder="예: 류지우 / 3-2-4"
+                           autocomplete="off" oninput="onBcSearch()">
+                </div>
+                <p class="note">비워두면 학년 → 반 순서로 들어가는 화면이 나옵니다.</p>
                 <button class="wide secondary" onclick="refreshTasks(false)">목록 새로 고치기</button>
             </div>
 
@@ -475,6 +480,7 @@ let serverOK = false;
 let flushing = false;
 let flushStartedAt = 0;
 let bcGrade = null, bcClass = null;   // 반별 조회 위치
+let bcQuery = '';                     // 반별 조회 안의 이름 검색어
 
 // ============================================================
 // 브라우저 저장소 (사용할 수 없는 환경에서도 앱은 동작해야 합니다)
@@ -1589,9 +1595,117 @@ function renderByClass() {
 
     const list = effectiveTasks();
 
-    if (bcGrade === null)      box.innerHTML = bcGradeView(list);
+    if (bcQuery)               box.innerHTML = bcSearchView(list);
+    else if (bcGrade === null) box.innerHTML = bcGradeView(list);
     else if (bcClass === null) box.innerHTML = bcClassView(list);
     else                       box.innerHTML = bcStudentView(list);
+}
+
+function onBcSearch() {
+    bcQuery = document.getElementById('bcSearch').value.trim().replace(/\s+/g, '');
+    renderByClass();
+}
+
+function clearBcSearch() {
+    document.getElementById('bcSearch').value = '';
+    bcQuery = '';
+    renderByClass();
+}
+
+// 이름이나 3-2-4 꼴로 학생을 찾습니다. 반을 몰라도 됩니다.
+function bcMatches(q) {
+    const code = q.match(/^(\d)[-.](\d{1,2})[-.](\d{1,2})$/);
+
+    if (code) {
+        const g = +code[1], c = +code[2], n = +code[3];
+        return students.filter(function (s) {
+            return s.grade === g && s.class === c && s.number === n;
+        });
+    }
+
+    const bare = function (s) { return s.name.replace(/\s+/g, ''); };
+    const head = students.filter(function (s) { return bare(s).indexOf(q) === 0; });
+    return head.length > 0
+        ? head
+        : students.filter(function (s) { return bare(s).indexOf(q) > -1; });
+}
+
+function bcSearchView(list) {
+    const hits = bcMatches(bcQuery).sort(function (a, b) {
+        return (a.grade - b.grade) || (a.class - b.class) || (a.number - b.number);
+    });
+
+    const crumb = '<div class="crumb">' +
+                      '<a onclick="clearBcSearch()">← 반별 조회로 돌아가기</a>' +
+                  '</div>';
+
+    if (hits.length === 0) {
+        return '<div class="card">' + crumb +
+               '<p class="empty">"' + esc(bcQuery) + '" — 맞는 학생이 없습니다.<br>' +
+               '이름을 다시 확인하거나, 학생명단을 새로 불러와 보세요.</p></div>';
+    }
+
+    const shown = hits.slice(0, 20);
+
+    const cards = shown.map(function (s) {
+        const items = list.filter(function (t) {
+            return t.grade === s.grade && t.class === s.class && t.number === s.number;
+        });
+        return stuCard({
+            grade: s.grade, class: s.class, number: s.number,
+            name: s.name, items: items
+        }, true);
+    }).join('');
+
+    const more = hits.length > shown.length
+        ? '<p class="empty">맞는 학생이 ' + hits.length + '명입니다. 앞의 ' +
+          shown.length + '명만 보여줍니다. 이름을 더 입력해 보세요.</p>'
+        : '';
+
+    return '<div class="card">' + crumb +
+               '<h3>"' + esc(bcQuery) + '" 검색 결과 ' + hits.length + '명</h3>' +
+               cards + more +
+           '</div>';
+}
+
+// 학생 한 명의 카드. 반별 조회와 검색 결과가 함께 씁니다.
+// withClass 가 참이면 이름 앞에 학년·반을 함께 보여줍니다.
+function stuCard(s, withClass) {
+    const anyLate = s.items.some(isLate);
+
+    const who = withClass
+        ? s.grade + '학년 ' + s.class + '반 ' + s.number + '번 ' + esc(s.name)
+        : s.number + '번 ' + esc(s.name);
+
+    if (s.items.length === 0) {
+        return '<div class="stu" style="border-color:#86efac; background:#f0fdf4;">' +
+                   '<div class="name" style="margin-bottom:0;">' + who +
+                       ' <span style="font-weight:400; color:#166534; font-size:13px;">' +
+                       '밀린 과제 없음</span></div>' +
+               '</div>';
+    }
+
+    const lines = s.items.map(function (t) {
+        const right = t.queued
+            ? '<span class="tag">업로드 대기</span>'
+            : '<button class="success" onclick="askComplete(' + t.row + ',\'' + t.type + '\')">완료</button>';
+        const days = isLate(t)
+            ? ' <span class="days">' + daysSince(t.date) + '일 경과</span>'
+            : '';
+        return '<div class="line">' +
+                   '<div>' + TASK_NAME[t.type] + ' · ' + esc(t.reason) +
+                       ' <span style="color:#888;">(' + esc(t.date) + ')</span>' + days + '</div>' +
+                   right +
+               '</div>';
+    }).join('');
+
+    return '<div class="stu"' + (anyLate ? ' style="border-color:#dc2626; background:#fef2f2;"' : '') + '>' +
+               '<div class="name">' + who +
+                   ' <span style="font-weight:400; color:#888; font-size:13px;">' +
+                   s.items.length + '건</span>' +
+                   (anyLate ? '<span class="tag late">밀림</span>' : '') + '</div>' +
+               lines +
+           '</div>';
 }
 
 function bcGradeView(list) {
@@ -1665,32 +1779,8 @@ function bcStudentView(list) {
             if (la !== lb) return lb - la;
             return a - b;
         })
-        .map(function (k) {
-            const s = groups[k];
-            const anyLate = s.items.some(isLate);
-
-            const lines = s.items.map(function (t) {
-                const right = t.queued
-                    ? '<span class="tag">업로드 대기</span>'
-                    : '<button class="success" onclick="askComplete(' + t.row + ',\'' + t.type + '\')">완료</button>';
-                const days = isLate(t)
-                    ? ' <span class="days">' + daysSince(t.date) + '일 경과</span>'
-                    : '';
-                return '<div class="line">' +
-                           '<div>' + TASK_NAME[t.type] + ' · ' + esc(t.reason) +
-                               ' <span style="color:#888;">(' + esc(t.date) + ')</span>' + days + '</div>' +
-                           right +
-                       '</div>';
-            }).join('');
-
-            return '<div class="stu"' + (anyLate ? ' style="border-color:#dc2626; background:#fef2f2;"' : '') + '>' +
-                       '<div class="name">' + s.number + '번 ' + esc(s.name) +
-                           ' <span style="font-weight:400; color:#888; font-size:13px;">' +
-                           s.items.length + '건</span>' +
-                           (anyLate ? '<span class="tag late">밀림</span>' : '') + '</div>' +
-                       lines +
-                   '</div>';
-        }).join('');
+        .map(function (k) { return stuCard(groups[k], false); })
+        .join('');
 
     return '<div class="card">' + crumb +
                '<h3>' + bcGrade + '학년 ' + bcClass + '반 · 확인할 학생 ' +
@@ -1701,6 +1791,9 @@ function bcStudentView(list) {
 function bcGo(g, c) {
     bcGrade = g;
     bcClass = c;
+    bcQuery = '';
+    const box = document.getElementById('bcSearch');
+    if (box) box.value = '';
     renderByClass();
     window.scrollTo(0, 0);
 }
